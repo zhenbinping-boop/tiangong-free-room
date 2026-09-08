@@ -23,7 +23,7 @@ JWXS_SEARCH_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeCl
 JWXS_DATA_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/data"
 
 # WebVPN Reverse Proxy Encoding for jwxs.tiangong.edu.cn
-WEBVPN_JWXS_BASE = "https://vpn.tiangong.edu.cn/https/77726473706f6e73656164647265737330303121/student/teachingResources/freeClassroom"
+WEBVPN_JWXS_BASE = "https://vpn.tiangong.edu.cn/https/6a7778732e7469616e676f6e672e6564752e636e/student/teachingResources/freeClassroom"
 
 # Building & Room Layouts for Fallback Generator
 BUILDING_ROOM_TEMPLATES = {
