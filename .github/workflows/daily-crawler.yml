@@ -46,6 +46,7 @@ jobs:
         with:
           commit_message: "chrono: auto-update today.json schedule data [skip ci]"
           file_pattern: "public/data/today.json web/data/today.json"
+          skip_dirty_check: true
 
       - name: Deploy to GitHub Pages (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
