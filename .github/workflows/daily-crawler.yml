@@ -43,13 +43,20 @@ jobs:
         run: |
           python crawler/fetch_rooms.py
 
+      - name: Fetch and Sync Latest Remote Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git rebase origin/main || true
+
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chrono: auto-update today.json schedule data [skip ci]"
           file_pattern: "public/data/today.json web/data/today.json"
           skip_dirty_check: true
-          push_options: '--force'
+          push_options: '--force-with-lease'
 
       - name: Deploy to GitHub Pages (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
