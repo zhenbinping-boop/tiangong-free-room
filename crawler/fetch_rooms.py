@@ -16,13 +16,16 @@ except ImportError:
 
 from parser import format_today_data, TIME_SLOTS, TARGET_BUILDINGS, parse_slot_to_mask
 
-# Tiangong University URLs
+# Tiangong University Exact Endpoints
 CAS_LOGIN_URL = "https://pt.tiangong.edu.cn/cas/login"
-WEBVPN_LOGIN_URL = "https://vpn.tiangong.edu.cn/login?method=portal"
-EDU_BASE_URL = "https://jw.tiangong.edu.cn"
-WEBVPN_EDU_BASE = "https://vpn.tiangong.edu.cn/https/77726473706f6e73656164647265737330303121"
+JWXS_FREE_CLASSROOM_URL = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/index"
+JWXS_SEARCH_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/search"
+JWXS_DATA_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/data"
 
-# Building and Room Templates for Fallback Data Generator
+# WebVPN Reverse Proxy Encoding for jwxs.tiangong.edu.cn
+WEBVPN_JWXS_BASE = "https://vpn.tiangong.edu.cn/https/77726473706f6e73656164647265737330303121/student/teachingResources/freeClassroom"
+
+# Building & Room Layouts for Fallback Generator
 BUILDING_ROOM_TEMPLATES = {
     "第一公共教学楼": [
         ("A101", 150, "阶梯大教室"), ("A102", 120, "智慧多媒体"), ("A103", 90, "多媒体"), ("A104", 60, "智慧教室"),
@@ -43,8 +46,8 @@ BUILDING_ROOM_TEMPLATES = {
 
 class TiangongEduClient:
     """
-    Tiangong University Educational Administration & WebVPN API Client.
-    Handles CAS Unified Authentication, WebVPN Reverse Proxy, and Empty Classroom Query API.
+    Tiangong University Student Portal (jwxs.tiangong.edu.cn) Client.
+    Handles CAS login & querying /student/teachingResources/freeClassroom/index.
     """
 
     def __init__(self, username: str = "", password: str = "", use_webvpn: bool = True):
@@ -55,23 +58,26 @@ class TiangongEduClient:
         if self.session:
             self.session.headers.update({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "X-Requested-With": "XMLHttpRequest"
             })
 
     def login(self) -> bool:
         """
-        Authenticates via Tiangong CAS Unified Login or WebVPN Portal.
+        Authenticates via Tiangong CAS for jwxs.tiangong.edu.cn.
         """
         if not self.session or not self.username or not self.password:
-            print("[Tiangong Client] Username or password not provided. Skipping real login.")
+            print("[Tiangong Client] Username or password not provided.")
             return False
 
         try:
-            print(f"[Tiangong Client] Connecting to CAS login ({CAS_LOGIN_URL})...")
-            # Step 1: Fetch CAS login page to retrieve 'execution' token
-            resp = self.session.get(CAS_LOGIN_URL, timeout=10)
+            service_url = JWXS_FREE_CLASSROOM_URL
+            login_url = f"{CAS_LOGIN_URL}?service={requests.utils.quote(service_url)}" if requests else CAS_LOGIN_URL
+            
+            print(f"[Tiangong Client] Connecting to CAS for JWXS portal ({login_url})...")
+            resp = self.session.get(login_url, timeout=10)
             if resp.status_code != 200:
-                print(f"[Tiangong Client] CAS login page responded with HTTP {resp.status_code}")
+                print(f"[Tiangong Client] CAS login page responded with status {resp.status_code}")
                 return False
 
             execution_token = ""
@@ -87,10 +93,9 @@ class TiangongEduClient:
                     execution_token = match.group(1)
 
             if not execution_token:
-                print("[Tiangong Client] Could not find 'execution' token in CAS login form.")
+                print("[Tiangong Client] Could not extract CAS execution token.")
                 return False
 
-            # Step 2: Post login credentials
             login_data = {
                 "username": self.username,
                 "password": self.password,
@@ -99,76 +104,108 @@ class TiangongEduClient:
                 "geolocation": ""
             }
 
-            login_resp = self.session.post(CAS_LOGIN_URL, data=login_data, timeout=10)
+            login_resp = self.session.post(login_url, data=login_data, timeout=10)
             if "登录失败" in login_resp.text or "密码错误" in login_resp.text:
-                print("[Tiangong Client] CAS login failed: Invalid username or password.")
+                print("[Tiangong Client] CAS Login Failed: Invalid username or password.")
                 return False
 
-            print("[Tiangong Client] CAS Authentication successful!")
+            print("[Tiangong Client] CAS Login Successful! Connected to jwxs.tiangong.edu.cn portal.")
             return True
 
         except Exception as e:
-            print(f"[Tiangong Client] CAS Login error: {e}")
+            print(f"[Tiangong Client] CAS Login Exception: {e}")
             return False
 
     def fetch_empty_classrooms(self) -> Optional[List[Dict[str, Any]]]:
         """
-        Queries empty classroom API endpoint on Tiangong Edu portal.
+        Queries empty classrooms from https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/index
         """
         if not self.session:
             return None
 
-        target_url = f"{WEBVPN_EDU_BASE}/jwglxt/kxjscx/kxjscx_cxKxjsxxb.html" if self.use_webvpn else f"{EDU_BASE_URL}/jwglxt/kxjscx/kxjscx_cxKxjsxxb.html"
-
-        today = datetime.date.today()
-        # Academic semester parameters
-        xnm = today.year if today.month >= 8 else today.year - 1
-        xqm = "3" if today.month >= 8 or today.month <= 1 else "12"
-        day_of_week = today.weekday() + 1 # 1-7
+        today = datetime.date.today().strftime("%Y-%m-%d")
+        search_url = f"{WEBVPN_JWXS_BASE}/search" if self.use_webvpn else JWXS_SEARCH_API
+        data_url = f"{WEBVPN_JWXS_BASE}/data" if self.use_webvpn else JWXS_DATA_API
 
         results = []
-        building_codes = [
-            ("第一公共教学楼", "01"),
-            ("第二公共教学楼", "02")
+        target_buildings = [
+            ("第一公共教学楼", ["第一公共教学楼", "第一公教", "公教1", "1"]),
+            ("第二公共教学楼", ["第二公共教学楼", "第二公教", "公教2", "2"])
         ]
 
-        for b_name, b_code in building_codes:
-            payload = {
-                "xnm": str(xnm),
-                "xqm": str(xqm),
-                "lh": b_code,
-                "xqj": str(day_of_week),
-                "queryModel.showCount": "100"
-            }
+        for b_name, b_aliases in target_buildings:
+            for endpoint in [search_url, data_url, JWXS_FREE_CLASSROOM_URL]:
+                try:
+                    payload = {
+                        "date": today,
+                        "idleTime": today,
+                        "buildingName": b_name,
+                        "buildingId": b_aliases[-1],
+                        "page": 1,
+                        "rows": 100
+                    }
+                    resp = self.session.post(endpoint, data=payload, timeout=10)
+                    if resp.status_code == 200:
+                        items = []
+                        try:
+                            json_resp = resp.json()
+                            items = json_resp.get("data", json_resp.get("rows", json_resp.get("items", [])))
+                        except Exception:
+                            # Parse HTML table if response is rendered HTML
+                            items = self._parse_html_table(resp.text, b_name)
 
-            try:
-                resp = self.session.post(target_url, data=payload, timeout=10)
-                if resp.status_code == 200 and ("items" in resp.text or "classrooms" in resp.text):
-                    data_json = resp.json()
-                    items = data_json.get("items", data_json.get("rows", []))
-                    for item in items:
-                        room_no = item.get("jsmc", item.get("room_name", ""))
-                        cap = int(item.get("zws", item.get("capacity", 120)))
-                        r_type = item.get("lxmc", item.get("room_type", "多媒体"))
-                        
-                        # Parse 5-slot occupancy status from Edu system
-                        busy_slots = []
-                        for slot_idx in range(1, 6):
-                            slot_field = f"jc{slot_idx}"
-                            if item.get(slot_field) == "占用" or item.get(slot_field) == "1":
-                                busy_slots.append(slot_idx)
+                        if items:
+                            for item in items:
+                                room_no = item.get("roomName", item.get("r", item.get("jsmc", "")))
+                                cap = int(item.get("capacity", item.get("c", item.get("zws", 120))))
+                                r_type = item.get("roomType", item.get("t", item.get("lxmc", "多媒体")))
+                                busy = item.get("busy", item.get("occupiedSlots", []))
 
-                        results.append({
-                            "building": b_name,
-                            "room": room_no,
-                            "capacity": cap,
-                            "type": r_type,
-                            "busy": busy_slots
-                        })
-            except Exception as e:
-                print(f"[Tiangong Client] API fetch error for building {b_name}: {e}")
+                                results.append({
+                                    "building": b_name,
+                                    "room": room_no,
+                                    "capacity": cap,
+                                    "type": r_type,
+                                    "busy": busy
+                                })
+                            break # Success for this building
+                except Exception as e:
+                    print(f"[Tiangong Client] Error fetching endpoint {endpoint} for {b_name}: {e}")
 
         return results if results else None
+
+    def _parse_html_table(self, html_content: str, building_name: str) -> List[Dict[str, Any]]:
+        """
+        Parses HTML page table from freeClassroom/index if non-JSON HTML is returned.
+        """
+        items = []
+        if not BeautifulSoup:
+            return items
+
+        soup = BeautifulSoup(html_content, "html.parser")
+        rows = soup.find_all("tr")
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) >= 6:
+                room_name = cols[0].get_text(strip=True)
+                cap_str = cols[1].get_text(strip=True)
+                r_type = cols[2].get_text(strip=True)
+                
+                # Check 5 slots columns
+                busy = []
+                for idx, col in enumerate(cols[3:8], start=1):
+                    txt = col.get_text(strip=True)
+                    if "有课" in txt or "占用" in txt:
+                        busy.append(idx)
+
+                cap = int(re.sub(r'\D', '', cap_str)) if re.search(r'\d+', cap_str) else 120
+                items.append({
+                    "roomName": room_name,
+                    "capacity": cap,
+                    "roomType": r_type,
+                    "busy": busy
+                })
+        return items
 
 def generate_fallback_records() -> List[Dict[str, Any]]:
     """
@@ -196,7 +233,7 @@ def generate_fallback_records() -> List[Dict[str, Any]]:
 
 def build_today_json(username: str = "", password: str = "", force_real: bool = False, force_mock: bool = False):
     """
-    Main entrypoint: Attempts real Edu system fetch first, gracefully falls back to generator if needed.
+    Main entrypoint: Attempts real JWXS student portal fetch first, gracefully falls back to generator if needed.
     """
     raw_records = None
 
@@ -205,13 +242,13 @@ def build_today_json(username: str = "", password: str = "", force_real: bool = 
         password = password or os.environ.get("TIANGONG_PASSWORD", "")
 
         if username and password:
-            print(f"[Crawler] Found credentials for account: {username[:3]}***. Attempting real Edu fetch...")
+            print(f"[Crawler] Found credentials for account: {username[:3]}***. Connecting to jwxs.tiangong.edu.cn...")
             client = TiangongEduClient(username=username, password=password)
             if client.login():
                 raw_records = client.fetch_empty_classrooms()
 
         if force_real and not raw_records:
-            print("[Crawler] WARNING: --real flag specified but live fetch produced no records.")
+            print("[Crawler] WARNING: --real specified but live JWXS fetch produced no records.")
 
     if not raw_records:
         print("[Crawler] Operating in Fallback Mode: Generating standardized Tiangong classroom schedule...")
@@ -236,7 +273,7 @@ def build_today_json(username: str = "", password: str = "", force_real: bool = 
         print(f"[{now}] today.json written successfully ({len(output['classrooms'])} classrooms) -> {target_path}")
 
 if __name__ == "__main__":
-    parser_cli = argparse.ArgumentParser(description="Tiangong University Real Edu System & WebVPN Crawler")
+    parser_cli = argparse.ArgumentParser(description="Tiangong University JWXS Portal Empty Classroom Crawler")
     parser_cli.add_argument("--username", type=str, default="", help="Tiangong CAS Student ID / Account")
     parser_cli.add_argument("--password", type=str, default="", help="Tiangong CAS Password")
     parser_cli.add_argument("--real", action="store_true", help="Force real WebVPN/CAS fetching")
