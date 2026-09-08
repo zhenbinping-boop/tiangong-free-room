@@ -60,8 +60,11 @@ class TiangongEduClient:
         if self.session:
             self.session.headers.update({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "X-Requested-With": "XMLHttpRequest"
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": JWXS_FREE_CLASSROOM_URL,
+                "Origin": "https://jwxs.tiangong.edu.cn"
             })
             if self.cookie:
                 self.session.headers.update({"Cookie": self.cookie})
@@ -163,7 +166,16 @@ class TiangongEduClient:
                         "page": 1,
                         "rows": 100
                     }
-                    resp = self.session.post(endpoint, data=payload, timeout=10, allow_redirects=False)
+                    
+                    headers = {}
+                    if "vpn.tiangong.edu.cn" in endpoint:
+                        headers["Referer"] = f"{WEBVPN_JWXS_BASE}/index"
+                        headers["Origin"] = "https://vpn.tiangong.edu.cn"
+                    else:
+                        headers["Referer"] = JWXS_FREE_CLASSROOM_URL
+                        headers["Origin"] = "https://jwxs.tiangong.edu.cn"
+
+                    resp = self.session.post(endpoint, data=payload, headers=headers, timeout=10, allow_redirects=False)
                     print(f"[Tiangong Client] Requesting {endpoint} (Building: {b_name}) -> HTTP {resp.status_code}")
 
                     if resp.status_code in (301, 302):
