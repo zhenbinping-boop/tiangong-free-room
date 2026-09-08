@@ -19,6 +19,7 @@ from parser import format_today_data, TIME_SLOTS, TARGET_BUILDINGS, parse_slot_t
 # Tiangong University Exact Endpoints
 CAS_LOGIN_URL = "https://pt.tiangong.edu.cn/cas/login"
 JWXS_FREE_CLASSROOM_URL = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/index"
+JWXS_TODAY_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/today"
 JWXS_SEARCH_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/search"
 JWXS_DATA_API = "https://jwxs.tiangong.edu.cn/student/teachingResources/freeClassroom/data"
 
@@ -134,11 +135,11 @@ class TiangongEduClient:
 
         # Candidate endpoints: Both direct campus portal & WebVPN proxy
         endpoints_to_try = [
-            "https://jwxs.tiangong.edu.cn/today",
+            JWXS_TODAY_API,
+            f"{WEBVPN_JWXS_BASE}/today",
             JWXS_SEARCH_API,
             JWXS_DATA_API,
             JWXS_FREE_CLASSROOM_URL,
-            f"{WEBVPN_JWXS_BASE}/today",
             f"{WEBVPN_JWXS_BASE}/search",
             f"{WEBVPN_JWXS_BASE}/data",
             WEBVPN_JWXS_BASE
