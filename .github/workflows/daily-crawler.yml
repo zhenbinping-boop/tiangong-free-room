@@ -33,9 +33,12 @@ jobs:
         run: |
           python crawler/test_bitmask.py
 
-      - name: Run Crawler & Parser Script
+      - name: Run Real Crawler & Parser Script
+        env:
+          TIANGONG_USERNAME: ${{ secrets.TIANGONG_USERNAME }}
+          TIANGONG_PASSWORD: ${{ secrets.TIANGONG_PASSWORD }}
         run: |
-          python crawler/scraper.py
+          python crawler/fetch_rooms.py
 
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
