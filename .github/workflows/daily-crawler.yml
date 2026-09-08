@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,6 +49,7 @@ jobs:
           commit_message: "chrono: auto-update today.json schedule data [skip ci]"
           file_pattern: "public/data/today.json web/data/today.json"
           skip_dirty_check: true
+          push_options: '--force'
 
       - name: Deploy to GitHub Pages (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
