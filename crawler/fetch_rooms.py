@@ -131,8 +131,16 @@ class TiangongEduClient:
             return None
 
         today = datetime.date.today().strftime("%Y-%m-%d")
-        search_url = f"{WEBVPN_JWXS_BASE}/search" if self.use_webvpn else JWXS_SEARCH_API
-        data_url = f"{WEBVPN_JWXS_BASE}/data" if self.use_webvpn else JWXS_DATA_API
+
+        # Candidate endpoints: Both direct campus portal & WebVPN proxy
+        endpoints_to_try = [
+            JWXS_SEARCH_API,
+            JWXS_DATA_API,
+            JWXS_FREE_CLASSROOM_URL,
+            f"{WEBVPN_JWXS_BASE}/search",
+            f"{WEBVPN_JWXS_BASE}/data",
+            WEBVPN_JWXS_BASE
+        ]
 
         results = []
         target_buildings = [
@@ -141,7 +149,8 @@ class TiangongEduClient:
         ]
 
         for b_name, b_aliases in target_buildings:
-            for endpoint in [search_url, data_url, JWXS_FREE_CLASSROOM_URL]:
+            building_success = False
+            for endpoint in endpoints_to_try:
                 try:
                     payload = {
                         "date": today,
@@ -151,15 +160,26 @@ class TiangongEduClient:
                         "page": 1,
                         "rows": 100
                     }
-                    resp = self.session.post(endpoint, data=payload, timeout=10)
+                    resp = self.session.post(endpoint, data=payload, timeout=10, allow_redirects=False)
+                    print(f"[Tiangong Client] Requesting {endpoint} (Building: {b_name}) -> HTTP {resp.status_code}")
+
+                    if resp.status_code in (301, 302):
+                        redirect_url = resp.headers.get("Location", "")
+                        print(f"[Tiangong Client] Redirect detected -> {redirect_url}")
+                        if "login" in redirect_url:
+                            print("[Tiangong Client] WARNING: Cookie expired or invalid (redirected to login).")
+                        continue
+
                     if resp.status_code == 200:
                         items = []
                         try:
                             json_resp = resp.json()
                             items = json_resp.get("data", json_resp.get("rows", json_resp.get("items", [])))
+                            print(f"[Tiangong Client] Found {len(items)} items in JSON response from {endpoint}")
                         except Exception:
                             # Parse HTML table if response is rendered HTML
                             items = self._parse_html_table(resp.text, b_name)
+                            print(f"[Tiangong Client] Parsed {len(items)} items from HTML table response from {endpoint}")
 
                         if items:
                             for item in items:
@@ -175,9 +195,10 @@ class TiangongEduClient:
                                     "type": r_type,
                                     "busy": busy
                                 })
+                            building_success = True
                             break # Success for this building
                 except Exception as e:
-                    print(f"[Tiangong Client] Error fetching endpoint {endpoint} for {b_name}: {e}")
+                    print(f"[Tiangong Client] Exception requesting endpoint {endpoint}: {e}")
 
         return results if results else None
 
