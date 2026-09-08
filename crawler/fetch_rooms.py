@@ -52,9 +52,9 @@ class TiangongEduClient:
     """
 
     def __init__(self, username: str = "", password: str = "", cookie: str = "", use_webvpn: bool = True):
-        self.username = username
-        self.password = password
-        self.cookie = cookie
+        self.username = (username or "").strip()
+        self.password = (password or "").strip()
+        self.cookie = (cookie or "").strip().replace('\r', '').replace('\n', '')
         self.use_webvpn = use_webvpn
         self.session = requests.Session() if requests else None
         if self.session:
@@ -281,9 +281,9 @@ def build_today_json(username: str = "", password: str = "", force_real: bool = 
     raw_records = None
 
     if not force_mock:
-        cookie = os.environ.get("TIANGONG_COOKIE", "")
-        username = username or os.environ.get("TIANGONG_USERNAME", "")
-        password = password or os.environ.get("TIANGONG_PASSWORD", "")
+        cookie = os.environ.get("TIANGONG_COOKIE", "").strip().replace('\r', '').replace('\n', '')
+        username = username.strip() or os.environ.get("TIANGONG_USERNAME", "").strip()
+        password = password.strip() or os.environ.get("TIANGONG_PASSWORD", "").strip()
 
         if cookie or (username and password):
             print(f"[Crawler] Found authentication credentials (cookie/user). Connecting to jwxs.tiangong.edu.cn...")
