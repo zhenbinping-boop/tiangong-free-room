@@ -504,6 +504,10 @@ body {
   border-top: 1px dashed var(--border-color);
 }
 
+.timeline-bar.grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .timeline-slot {
   text-align: center;
 }

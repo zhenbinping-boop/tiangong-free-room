@@ -1,16 +1,16 @@
 /**
- * TIANGONG FREE CLASSROOM - PWA APPLICATION LOGIC
- * High-performance bitmask filtering & local time detection.
+ * TIANGONG FREE CLASSROOM - PWA APPLICATION LOGIC (PRD v2.0)
+ * High-performance 5-bit bitmask filtering & local time auto-matching.
  */
 
 // Application State
 const state = {
   data: null,
-  selectedBuilding: '全部',
+  selectedBuilding: 'ALL', // 'ALL', '第一公共教学楼', '第二公共教学楼'
   selectedSlots: new Set(),
   allDayFree: false,
   searchQuery: '',
-  sortBy: 'room_asc', // 'room_asc', 'cap_desc', 'free_slots'
+  sortBy: 'room_asc',
   theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 };
 
@@ -62,7 +62,17 @@ function updateThemeIcon() {
   }
 }
 
-// Time Detector & Auto Slot Recommendation
+// Auto Time Slot Recommendation (PRD v2.0 5-Slot Rules)
+function getAutoSlotNumber() {
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes <= 10 * 60) return 1;          // 10:00 前 -> 第1大节 (08:20-10:00)
+  if (minutes <= 12 * 60 + 30) return 2;     // 12:30 前 -> 第2大节 (10:20-12:00)
+  if (minutes <= 15 * 60 + 40) return 3;     // 15:40 前 -> 第3大节 (14:00-15:40)
+  if (minutes <= 17 * 60 + 40) return 4;     // 17:40 前 -> 第4大节 (16:00-17:40)
+  return 5;                                  // 17:40 后 -> 第5大节 (18:30-20:10)
+}
+
 function initTimeDetector() {
   updateLiveClock();
   setInterval(updateLiveClock, 10000);
@@ -78,36 +88,16 @@ function updateLiveClock() {
     dom.liveClock.textContent = timeStr;
   }
 
-  // Determine auto-selected slot based on current time
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  let recommendedSlot = 1; // Default Slot 1 (08:00 - 09:35)
-  let slotName = "第1-2节";
-
-  if (currentMinutes >= 480 && currentMinutes <= 575) { // 08:00 - 09:35
-    recommendedSlot = 1; slotName = "第1-2节 (正在进行)";
-  } else if (currentMinutes >= 576 && currentMinutes <= 690) { // 09:36 - 11:30
-    recommendedSlot = 2; slotName = "第3-4节 (正在进行)";
-  } else if (currentMinutes >= 691 && currentMinutes <= 809) { // 11:31 - 13:29
-    recommendedSlot = 3; slotName = "第5节 (即将开始)";
-  } else if (currentMinutes >= 810 && currentMinutes <= 905) { // 13:30 - 15:05
-    recommendedSlot = 4; slotName = "第6-7节 (正在进行)";
-  } else if (currentMinutes >= 906 && currentMinutes <= 1020) { // 15:06 - 17:00
-    recommendedSlot = 5; slotName = "第8-9节 (正在进行)";
-  } else if (currentMinutes >= 1021 && currentMinutes <= 1205) { // 17:01 - 20:05
-    recommendedSlot = 6; slotName = "第10-11节 (正在进行/即将开始)";
-  } else if (currentMinutes > 1205) {
-    recommendedSlot = 1; slotName = "第1-2节 (明日推荐)";
-  } else {
-    recommendedSlot = 1; slotName = "第1-2节 (即将开始)";
-  }
+  const autoSlot = getAutoSlotNumber();
+  const slotNames = ["", "第1大节 (08:20-10:00)", "第2大节 (10:20-12:00)", "第3大节 (14:00-15:40)", "第4大节 (16:00-17:40)", "第5大节 (18:30-20:10)"];
 
   if (dom.recommendedSlotText) {
-    dom.recommendedSlotText.innerHTML = `根据当前时间，推荐查询 <span>${slotName}</span>`;
+    dom.recommendedSlotText.innerHTML = `已根据当前时间推荐 <span>${slotNames[autoSlot]}</span>`;
   }
 
-  // Only auto-select on initial load if user hasn't toggled manually
+  // Auto select on first load if user hasn't selected manually
   if (state.selectedSlots.size === 0 && !state.allDayFree) {
-    state.selectedSlots.add(recommendedSlot);
+    state.selectedSlots.add(autoSlot);
   }
 }
 
@@ -137,7 +127,8 @@ async function fetchScheduleData() {
   state.data = fetchedData;
 
   if (dom.updatedAtText && fetchedData.updated_at) {
-    dom.updatedAtText.textContent = `数据更新于: ${fetchedData.updated_at}`;
+    const timeOnly = fetchedData.updated_at.split(' ')[1] || fetchedData.updated_at;
+    dom.updatedAtText.textContent = `更新于 ${timeOnly}`;
   }
 
   renderBuildingTabs();
@@ -194,14 +185,19 @@ function bindEvents() {
   }
 }
 
-// Render Building Capsules
+// Render Building Capsules (第一公共教学楼, 第二公共教学楼)
 function renderBuildingTabs() {
-  if (!dom.buildingTabs || !state.data) return;
+  if (!dom.buildingTabs) return;
 
-  const buildings = ['全部', ...state.data.buildings];
+  const buildings = [
+    { key: 'ALL', label: '全部' },
+    { key: '第一公共教学楼', label: '第一公教' },
+    { key: '第二公共教学楼', label: '第二公教' }
+  ];
+
   dom.buildingTabs.innerHTML = buildings.map(b => `
-    <button class="tab-btn ${state.selectedBuilding === b ? 'active' : ''}" data-building="${b}">
-      ${b}
+    <button class="tab-btn ${state.selectedBuilding === b.key ? 'active' : ''}" data-building="${b.key}">
+      ${b.label}
     </button>
   `).join('');
 
@@ -215,7 +211,7 @@ function renderBuildingTabs() {
   });
 }
 
-// Render Time Slot Selector Chips
+// Render Time Slot Grid (5 Big Slots)
 function renderSlotGrid() {
   if (!dom.slotGrid || !state.data) return;
 
@@ -239,7 +235,6 @@ function renderSlotGrid() {
 
       const slotNum = parseInt(chip.getAttribute('data-slot'), 10);
       if (state.selectedSlots.has(slotNum)) {
-        // Prevent clearing all slots (keep at least 1)
         if (state.selectedSlots.size > 1) {
           state.selectedSlots.delete(slotNum);
         }
@@ -253,14 +248,13 @@ function renderSlotGrid() {
   });
 }
 
-// Fast Local Bitmask Filtering & Classroom Cards Rendering
+// Bitmask Protocol Filter (occ & mask === 0)
 function renderClassrooms() {
   if (!dom.classroomList || !state.data) return;
 
-  // Compute Target Bitmask
   let targetMask = 0;
   if (state.allDayFree) {
-    targetMask = 2047; // Bit0..Bit10 all 1s
+    targetMask = 31; // 1 | 2 | 4 | 8 | 16 = 31
   } else {
     for (const slotNum of state.selectedSlots) {
       const slotObj = state.data.time_slots.find(s => s.slot === slotNum);
@@ -270,19 +264,18 @@ function renderClassrooms() {
     }
   }
 
-  // Pure JS Bitwise Filter: (room.occ & targetMask) === 0
   let filtered = state.data.classrooms.filter(room => {
-    // 1. Building Filter
-    if (state.selectedBuilding !== '全部' && room.b !== state.selectedBuilding) {
+    // 1. Building match
+    if (state.selectedBuilding !== 'ALL' && room.b !== state.selectedBuilding) {
       return false;
     }
 
-    // 2. Bitmask Protocol Check
+    // 2. 5-Bit Bitmask protocol: (room.occ & targetMask) === 0
     if ((room.occ & targetMask) !== 0) {
       return false;
     }
 
-    // 3. Search Filter
+    // 3. Search query filter
     if (state.searchQuery) {
       const q = state.searchQuery;
       const fullId = `${room.b}${room.r}`.toLowerCase();
@@ -304,17 +297,14 @@ function renderClassrooms() {
       const freeB = countFreeSlots(b.occ);
       return freeB - freeA;
     } else {
-      // Default: room_asc
       return a.r.localeCompare(b.r, undefined, { numeric: true });
     }
   });
 
-  // Update Results Count
   if (dom.resultsCount) {
     dom.resultsCount.textContent = filtered.length;
   }
 
-  // Render Empty State or Cards
   if (filtered.length === 0) {
     dom.classroomList.style.display = 'none';
     if (dom.emptyState) dom.emptyState.style.display = 'block';
@@ -335,17 +325,17 @@ function countFreeSlots(occ) {
   return count;
 }
 
-// Card Renderer with 6-Slot Timeline Bar
+// Classroom Card Renderer with 5-Slot Timeline Bar
 function renderRoomCard(room) {
   const timeSlots = state.data.time_slots;
-  
+  const shortBuildingName = room.b === '第一公共教学楼' ? '第一公教' : (room.b === '第二公共教学楼' ? '第二公教' : room.b);
+
   const timelineHtml = timeSlots.map(slot => {
     const isFree = (room.occ & slot.mask) === 0;
-    const shortLabel = slot.name.replace('第', '').replace('节', '');
     return `
       <div class="timeline-slot ${isFree ? 'free' : 'busy'}" title="${slot.name}: ${isFree ? '空闲' : '有课'}">
         <div class="slot-indicator"></div>
-        <div class="slot-label">${shortLabel}</div>
+        <div class="slot-label">${slot.name}</div>
       </div>
     `;
   }).join('');
@@ -354,7 +344,7 @@ function renderRoomCard(room) {
     <div class="classroom-card">
       <div class="card-header">
         <div class="room-title-group">
-          <span class="room-building">${room.b}</span>
+          <span class="room-building">${shortBuildingName}</span>
           <span class="room-name">${room.r}</span>
         </div>
         <div class="room-badges">
@@ -362,7 +352,7 @@ function renderRoomCard(room) {
           <span class="badge">${room.t}</span>
         </div>
       </div>
-      <div class="timeline-bar">
+      <div class="timeline-bar grid-5">
         ${timelineHtml}
       </div>
     </div>
@@ -375,7 +365,7 @@ function renderErrorState() {
       <div class="empty-state">
         <div class="empty-icon">⚠️</div>
         <div class="empty-title">无法加载数据</div>
-        <div class="empty-desc">请检查网络连接或确认 public/data/today.json 文件是否存在</div>
+        <div class="empty-desc">请检查网络连接或确认 data/today.json 结构</div>
       </div>
     `;
   }
