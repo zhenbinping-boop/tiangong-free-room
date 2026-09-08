@@ -47,12 +47,13 @@ BUILDING_ROOM_TEMPLATES = {
 class TiangongEduClient:
     """
     Tiangong University Student Portal (jwxs.tiangong.edu.cn) Client.
-    Handles CAS login & querying /student/teachingResources/freeClassroom/index.
+    Handles CAS login, Cookie authentication, & querying /student/teachingResources/freeClassroom/index.
     """
 
-    def __init__(self, username: str = "", password: str = "", use_webvpn: bool = True):
+    def __init__(self, username: str = "", password: str = "", cookie: str = "", use_webvpn: bool = True):
         self.username = username
         self.password = password
+        self.cookie = cookie
         self.use_webvpn = use_webvpn
         self.session = requests.Session() if requests else None
         if self.session:
@@ -61,6 +62,8 @@ class TiangongEduClient:
                 "Accept": "application/json, text/javascript, */*; q=0.01",
                 "X-Requested-With": "XMLHttpRequest"
             })
+            if self.cookie:
+                self.session.headers.update({"Cookie": self.cookie})
 
     def login(self) -> bool:
         """

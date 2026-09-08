@@ -37,6 +37,7 @@ jobs:
         env:
           TIANGONG_USERNAME: ${{ secrets.TIANGONG_USERNAME }}
           TIANGONG_PASSWORD: ${{ secrets.TIANGONG_PASSWORD }}
+          TIANGONG_COOKIE: ${{ secrets.TIANGONG_COOKIE }}
         run: |
           python crawler/fetch_rooms.py
 
