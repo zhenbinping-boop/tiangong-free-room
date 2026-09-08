@@ -67,8 +67,12 @@ class TiangongEduClient:
 
     def login(self) -> bool:
         """
-        Authenticates via Tiangong CAS for jwxs.tiangong.edu.cn.
+        Authenticates via Tiangong CAS for jwxs.tiangong.edu.cn or uses Session Cookie.
         """
+        if self.cookie:
+            print("[Tiangong Client] Using provided Session Cookie for authentication.")
+            return True
+
         if not self.session or not self.username or not self.password:
             print("[Tiangong Client] Username or password not provided.")
             return False
@@ -241,12 +245,13 @@ def build_today_json(username: str = "", password: str = "", force_real: bool = 
     raw_records = None
 
     if not force_mock:
+        cookie = os.environ.get("TIANGONG_COOKIE", "")
         username = username or os.environ.get("TIANGONG_USERNAME", "")
         password = password or os.environ.get("TIANGONG_PASSWORD", "")
 
-        if username and password:
-            print(f"[Crawler] Found credentials for account: {username[:3]}***. Connecting to jwxs.tiangong.edu.cn...")
-            client = TiangongEduClient(username=username, password=password)
+        if cookie or (username and password):
+            print(f"[Crawler] Found authentication credentials (cookie/user). Connecting to jwxs.tiangong.edu.cn...")
+            client = TiangongEduClient(username=username, password=password, cookie=cookie)
             if client.login():
                 raw_records = client.fetch_empty_classrooms()
 
