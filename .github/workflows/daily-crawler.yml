@@ -1,0 +1,56 @@
+name: Daily Tiangong Classroom Data Crawler & Deploy
+
+on:
+  schedule:
+    # Trigger daily at 19:00 UTC (03:00 AM Beijing Time)
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  crawl-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f crawler/requirements.txt ]; then pip install -r crawler/requirements.txt; fi
+
+      - name: Run Bitmask Unit Tests
+        run: |
+          python crawler/test_bitmask.py
+
+      - name: Run Crawler & Parser Script
+        run: |
+          python crawler/scraper.py
+
+      - name: Commit and Push Updated Data
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chrono: auto-update today.json schedule data [skip ci]"
+          file_pattern: "public/data/today.json web/data/today.json"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'web/'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
