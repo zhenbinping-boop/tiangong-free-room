@@ -134,9 +134,11 @@ class TiangongEduClient:
 
         # Candidate endpoints: Both direct campus portal & WebVPN proxy
         endpoints_to_try = [
+            "https://jwxs.tiangong.edu.cn/today",
             JWXS_SEARCH_API,
             JWXS_DATA_API,
             JWXS_FREE_CLASSROOM_URL,
+            f"{WEBVPN_JWXS_BASE}/today",
             f"{WEBVPN_JWXS_BASE}/search",
             f"{WEBVPN_JWXS_BASE}/data",
             WEBVPN_JWXS_BASE
