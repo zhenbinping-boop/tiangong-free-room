@@ -43,14 +43,9 @@ jobs:
           commit_message: "chrono: auto-update today.json schedule data [skip ci]"
           file_pattern: "public/data/today.json web/data/today.json"
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to GitHub Pages (gh-pages branch)
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: 'web/'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web
+          force_orphan: true
