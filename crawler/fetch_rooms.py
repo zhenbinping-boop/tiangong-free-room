@@ -75,15 +75,15 @@ class TiangongEduClient:
         """
         if self.cookie and self.session:
             print("[Tiangong Client] Testing provided Session Cookie...")
-            try:
-                test_resp = self.session.get(JWXS_FREE_CLASSROOM_URL, allow_redirects=False, timeout=8)
-                if test_resp.status_code == 200 and "gotoLogin" not in test_resp.text:
-                    print("[Tiangong Client] Session Cookie is valid and authenticated!")
-                    return True
-                else:
-                    print("[Tiangong Client] Session Cookie is expired or unauthenticated.")
-            except Exception as e:
-                print(f"[Tiangong Client] Session Cookie test failed: {e}")
+            for test_url in [JWXS_FREE_CLASSROOM_URL, f"{WEBVPN_JWXS_BASE}/index"]:
+                try:
+                    test_resp = self.session.get(test_url, allow_redirects=False, timeout=8)
+                    if test_resp.status_code == 200 and "gotoLogin" not in test_resp.text and "login" not in test_resp.text:
+                        print(f"[Tiangong Client] Session Cookie is valid and authenticated via {test_url}!")
+                        return True
+                except Exception as e:
+                    print(f"[Tiangong Client] Cookie test on {test_url} failed: {e}")
+            print("[Tiangong Client] Session Cookie is expired or unauthenticated.")
 
         if not self.session or not self.username or not self.password:
             print("[Tiangong Client] Username or password not provided for CAS fallback.")
@@ -99,29 +99,40 @@ class TiangongEduClient:
                 print(f"[Tiangong Client] CAS login page responded with status {resp.status_code}")
                 return False
 
-            execution_token = ""
-            if BeautifulSoup:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                exec_input = soup.find("input", {"name": "execution"})
-                if exec_input:
-                    execution_token = exec_input.get("value", "")
-
-            if not execution_token:
-                match = re.search(r'name="execution"\s+value="([^"]+)"', resp.text)
-                if match:
-                    execution_token = match.group(1)
-
-            if not execution_token:
-                print("[Tiangong Client] Could not extract CAS execution token.")
-                return False
-
             login_data = {
                 "username": self.username,
                 "password": self.password,
-                "execution": execution_token,
                 "_eventId": "submit",
                 "geolocation": ""
             }
+
+            execution_token = ""
+            if BeautifulSoup:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                form = soup.find("form") or soup
+                for inp in form.find_all("input"):
+                    n = inp.get("name")
+                    v = inp.get("value", "")
+                    if n:
+                        if n == "execution":
+                            execution_token = v
+                        elif n not in login_data:
+                            login_data[n] = v
+
+            if not execution_token:
+                # Flexible regex for execution token regardless of attribute order or quotes
+                m = re.search(r'<input[^>]*name=["\']execution["\'][^>]*value=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
+                if not m:
+                    m = re.search(r'<input[^>]*value=["\']([^"\']+)["\']\s*name=["\']execution["\']', resp.text, re.IGNORECASE)
+                if not m:
+                    m = re.search(r'execution["\']?\s*:\s*["\']([^"\']+)["\']', resp.text)
+                if m:
+                    execution_token = m.group(1)
+
+            if execution_token:
+                login_data["execution"] = execution_token
+            else:
+                print("[Tiangong Client] Warning: Could not extract CAS execution token, proceeding with collected form inputs.")
 
             login_resp = self.session.post(login_url, data=login_data, timeout=10)
             if "登录失败" in login_resp.text or "密码错误" in login_resp.text:
