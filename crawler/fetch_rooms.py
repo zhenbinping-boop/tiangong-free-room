@@ -71,21 +71,29 @@ class TiangongEduClient:
 
     def login(self) -> bool:
         """
-        Authenticates via Tiangong CAS for jwxs.tiangong.edu.cn or uses Session Cookie.
+        Authenticates via Session Cookie or falls back to Tiangong CAS Username/Password.
         """
-        if self.cookie:
-            print("[Tiangong Client] Using provided Session Cookie for authentication.")
-            return True
+        if self.cookie and self.session:
+            print("[Tiangong Client] Testing provided Session Cookie...")
+            try:
+                test_resp = self.session.get(JWXS_FREE_CLASSROOM_URL, allow_redirects=False, timeout=8)
+                if test_resp.status_code == 200 and "gotoLogin" not in test_resp.text:
+                    print("[Tiangong Client] Session Cookie is valid and authenticated!")
+                    return True
+                else:
+                    print("[Tiangong Client] Session Cookie is expired or unauthenticated.")
+            except Exception as e:
+                print(f"[Tiangong Client] Session Cookie test failed: {e}")
 
         if not self.session or not self.username or not self.password:
-            print("[Tiangong Client] Username or password not provided.")
+            print("[Tiangong Client] Username or password not provided for CAS fallback.")
             return False
 
         try:
             service_url = JWXS_FREE_CLASSROOM_URL
             login_url = f"{CAS_LOGIN_URL}?service={requests.utils.quote(service_url)}" if requests else CAS_LOGIN_URL
             
-            print(f"[Tiangong Client] Connecting to CAS for JWXS portal ({login_url})...")
+            print(f"[Tiangong Client] Connecting to CAS login ({login_url})...")
             resp = self.session.get(login_url, timeout=10)
             if resp.status_code != 200:
                 print(f"[Tiangong Client] CAS login page responded with status {resp.status_code}")
@@ -120,7 +128,7 @@ class TiangongEduClient:
                 print("[Tiangong Client] CAS Login Failed: Invalid username or password.")
                 return False
 
-            print("[Tiangong Client] CAS Login Successful! Connected to jwxs.tiangong.edu.cn portal.")
+            print("[Tiangong Client] CAS Authentication successful!")
             return True
 
         except Exception as e:
