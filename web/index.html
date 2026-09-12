@@ -54,6 +54,8 @@
   </div>
 
   <div class="controls">
+    <div id="buildingTabs" class="seg-row" role="group" aria-label="选择楼栋"></div>
+
     <div id="slotGrid" class="slot-row" role="group" aria-label="选择节次"></div>
 
     <div class="controls-row">
@@ -102,6 +104,10 @@
   </div>
 
   <div class="content-toolbar">
+    <label class="switch" id="defaultWrap" hidden>
+      <input type="checkbox" id="defaultBuildingCheck">
+      <span id="defaultBuildingLabel">设为默认</span>
+    </label>
     <button id="collapseAllBtn" class="link-btn" type="button">全部收起</button>
   </div>
 

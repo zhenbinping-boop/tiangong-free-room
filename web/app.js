@@ -8,6 +8,7 @@
 
 const state = {
   data: null,
+  building: 'all',
   selectedSlots: new Set(),
   allDayFree: false,
   searchQuery: '',
@@ -20,6 +21,8 @@ const state = {
     || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 };
 
+const DEFAULT_BUILDING_KEY = 'defaultBuilding';
+
 const dom = {
   statusDot: document.getElementById('statusDot'),
   statusText: document.getElementById('statusText'),
@@ -27,7 +30,11 @@ const dom = {
   staleDetail: document.getElementById('staleDetail'),
   pwaBanner: document.getElementById('pwaInstallBanner'),
   installBtn: document.getElementById('installPwaBtn'),
+  buildingTabs: document.getElementById('buildingTabs'),
   slotGrid: document.getElementById('slotGrid'),
+  defaultWrap: document.getElementById('defaultWrap'),
+  defaultBuildingCheck: document.getElementById('defaultBuildingCheck'),
+  defaultBuildingLabel: document.getElementById('defaultBuildingLabel'),
   searchInput: document.getElementById('searchInput'),
   sortSelect: document.getElementById('sortSelect'),
   showBusyCheckbox: document.getElementById('showBusyCheckbox'),
@@ -114,8 +121,36 @@ async function fetchScheduleData() {
 
   state.data = data;
   applyFreshness(data);
+  applyStoredBuilding(data);
   renderSlots();
   render();
+}
+
+/* --------------------------------------------------------- 默认楼栋 */
+
+function storedBuilding() {
+  try {
+    return localStorage.getItem(DEFAULT_BUILDING_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function setStoredBuilding(name) {
+  try {
+    if (name) localStorage.setItem(DEFAULT_BUILDING_KEY, name);
+    else localStorage.removeItem(DEFAULT_BUILDING_KEY);
+  } catch (e) {
+    /* 隐私模式下 localStorage 可能不可写，静默降级为不记住 */
+  }
+}
+
+function applyStoredBuilding(data) {
+  const saved = storedBuilding();
+  if (!saved) return;
+  const exists = (data.classrooms || []).some(r => (r.b || '未知楼栋') === saved);
+  if (exists) state.building = saved;
+  else setStoredBuilding('');
 }
 
 function shanghaiToday() {
@@ -210,7 +245,14 @@ function render() {
 
   const mask = targetMask();
   const all = state.data.classrooms || [];
-  const base = all.filter(r => matchesCapacity(r) && matchesSearch(r));
+
+  // 楼栋计数要反映"切过去能有多少空"，所以先不加楼栋条件
+  const scoped = all.filter(r => matchesCapacity(r) && matchesSearch(r));
+  const base = state.building === 'all'
+    ? scoped
+    : scoped.filter(r => (r.b || '未知楼栋') === state.building);
+
+  renderBuildingTabs(scoped, mask);
 
   const buildings = new Map();
   for (const room of base) {
@@ -279,8 +321,79 @@ function render() {
   dom.emptyState.hidden = html !== '';
 
   syncCollapseAllLabel();
+  syncDefaultControl();
   updateStatusBar(totalFree, base.length, mask);
   bindFloorToggles();
+}
+
+/* ----------------------------------------------------------- 楼栋选择 */
+
+function buildingList() {
+  const seen = [];
+  for (const room of state.data.classrooms || []) {
+    const b = room.b || '未知楼栋';
+    if (!seen.includes(b)) seen.push(b);
+  }
+  return seen;
+}
+
+function shortBuildingName(name) {
+  return String(name).replace('公共教学楼', '公教');
+}
+
+function renderBuildingTabs(scoped, mask) {
+  if (!dom.buildingTabs) return;
+
+  const buildings = buildingList();
+  if (buildings.length <= 1) {
+    dom.buildingTabs.hidden = true;
+    return;
+  }
+  dom.buildingTabs.hidden = false;
+
+  const freeIn = (list) => list.filter(r => (r.occ & mask) === 0).length;
+
+  const tabs = [{
+    key: 'all',
+    label: '全部',
+    count: freeIn(scoped)
+  }];
+  for (const b of buildings) {
+    tabs.push({
+      key: b,
+      label: shortBuildingName(b),
+      count: freeIn(scoped.filter(r => (r.b || '未知楼栋') === b))
+    });
+  }
+
+  dom.buildingTabs.innerHTML = tabs.map(t => {
+    const on = state.building === t.key;
+    return `
+      <button class="seg-btn ${on ? 'is-on' : ''}" type="button"
+              data-building="${escapeAttr(t.key)}" aria-pressed="${on}">
+        <span class="seg-label">${escapeHtml(t.label)}</span>
+        <span class="seg-count">${t.count}</span>
+      </button>
+    `;
+  }).join('');
+
+  dom.buildingTabs.querySelectorAll('.seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.building = btn.getAttribute('data-building');
+      render();
+    });
+  });
+}
+
+function syncDefaultControl() {
+  if (!dom.defaultWrap) return;
+  const specific = state.building !== 'all';
+  dom.defaultWrap.hidden = !specific;
+  if (!specific) return;
+
+  const isDefault = storedBuilding() === state.building;
+  dom.defaultBuildingCheck.checked = isDefault;
+  dom.defaultBuildingLabel.textContent = isDefault ? '已设为默认' : '设为默认';
 }
 
 function renderRooms(rooms, allFull, floorTotal, mask) {
@@ -431,6 +544,13 @@ function bindEvents() {
         updateFilterBadge();
         render();
       });
+    });
+  }
+
+  if (dom.defaultBuildingCheck) {
+    dom.defaultBuildingCheck.addEventListener('change', e => {
+      setStoredBuilding(e.target.checked ? state.building : '');
+      syncDefaultControl();
     });
   }
 
