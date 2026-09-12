@@ -30,6 +30,8 @@ const dom = {
   staleDetail: document.getElementById('staleDetail'),
   pwaBanner: document.getElementById('pwaInstallBanner'),
   installBtn: document.getElementById('installPwaBtn'),
+  pwaInstallText: document.getElementById('pwaInstallText'),
+  installDismissBtn: document.getElementById('installDismissBtn'),
   buildingTabs: document.getElementById('buildingTabs'),
   slotGrid: document.getElementById('slotGrid'),
   defaultWrap: document.getElementById('defaultWrap'),
@@ -56,6 +58,7 @@ let searchTimer = null;
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initTimeDetector();
+  initInstallPrompt();
   bindEvents();
   fetchScheduleData();
   registerServiceWorker();
@@ -95,6 +98,70 @@ function initTimeDetector() {
   if (state.selectedSlots.size === 0) {
     state.selectedSlots.add(getAutoSlotNumber());
   }
+}
+
+/* ------------------------------------------------------- PWA 安装引导 */
+
+/* Android/桌面 Chrome 有 beforeinstallprompt 可以程序化触发；
+   iOS 没有，只能给手动指引（且只有 Safari 支持「添加到主屏幕」）。
+   目标用户多从微信/QQ 群点进来，微信内置浏览器两者都不支持，
+   所以微信里要先引导换浏览器，指引才有意义。 */
+
+const INSTALL_DISMISS_KEY = 'installBannerDismissed';
+
+function isStandaloneDisplay() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || navigator.standalone === true;
+}
+
+function isIosDevice() {
+  const ua = String(navigator.userAgent || '');
+  /* iPadOS 13+ 的 UA 伪装成 macOS，靠多点触控区分 */
+  return /iphone|ipad|ipod/i.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isWeChat() {
+  return /micromessenger/i.test(String(navigator.userAgent || ''));
+}
+
+function installBannerDismissed() {
+  try {
+    return localStorage.getItem(INSTALL_DISMISS_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function showInstallHint(text, hideAddButton) {
+  if (dom.pwaInstallText) dom.pwaInstallText.textContent = text;
+  if (dom.installBtn) dom.installBtn.hidden = !!hideAddButton;
+  if (dom.pwaBanner) dom.pwaBanner.hidden = false;
+}
+
+function initInstallPrompt() {
+  if (!dom.pwaBanner) return;
+  if (isStandaloneDisplay()) return;    /* 已是 App 形态，不打扰 */
+  if (installBannerDismissed()) return; /* 用户明确说过暂不 */
+
+  if (isIosDevice()) {
+    showInstallHint(
+      isWeChat()
+        ? '点右上角「···」选择在浏览器打开，再用 Safari 的分享菜单「添加到主屏幕」'
+        : '用 Safari 底部的分享菜单选「添加到主屏幕」，像 App 一样打开',
+      true
+    );
+  }
+  /* 其余平台等 beforeinstallprompt 到来后再显示，见 bindEvents() */
+}
+
+function dismissInstallBanner() {
+  try {
+    localStorage.setItem(INSTALL_DISMISS_KEY, '1');
+  } catch (e) {
+    /* 隐私模式下写不进就只隐藏这一次 */
+  }
+  if (dom.pwaBanner) dom.pwaBanner.hidden = true;
 }
 
 /* ------------------------------------------------------------- 数据层 */
@@ -571,6 +638,7 @@ function bindEvents() {
 
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
+    if (installBannerDismissed()) return;
     deferredPrompt = e;
     if (dom.pwaBanner) dom.pwaBanner.hidden = false;
   });
@@ -581,9 +649,18 @@ function bindEvents() {
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       deferredPrompt = null;
-      dom.pwaBanner.hidden = true;
+      if (dom.pwaBanner) dom.pwaBanner.hidden = true;
     });
   }
+
+  if (dom.installDismissBtn) {
+    dom.installDismissBtn.addEventListener('click', dismissInstallBanner);
+  }
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    if (dom.pwaBanner) dom.pwaBanner.hidden = true;
+  });
 }
 
 /* --------------------------------------------------------------- 工具 */

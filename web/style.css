@@ -298,6 +298,12 @@ h1, h2, h3, button, input, select, summary, label, span, p {
   cursor: pointer;
 }
 
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
 /* ------------------------------------------------------------- 控件区 */
 
 .controls {
