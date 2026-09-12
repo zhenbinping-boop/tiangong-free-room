@@ -2,119 +2,106 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>天工大空教室极速查 (五大节版)</title>
-  
-  <!-- SEO & PWA Meta Tags -->
-  <meta name="description" content="免登录、零广告、秒级直达的天津工业大学空教室极简查询工具，支持第一公共教学楼、第二公共教学楼5大节位掩码过滤">
-  <meta name="theme-color" content="#0284c7">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>天工大空教室 · 按楼栋楼层查</title>
+
+  <meta name="description" content="天津工业大学空教室查询：按楼栋、楼层查看第一与第二公共教学楼的空闲教室，数据每日自动抓取自教务系统。">
+  <meta name="theme-color" content="#0369a1">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="天工空教室">
-  
-  <!-- Manifest & Styles -->
+
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Top Header / Navigation -->
-  <header class="app-header">
-    <div class="header-container">
-      <div class="brand-logo">
-        <div class="brand-icon">🏫</div>
-        <div>
-          <h1 class="brand-title">天工大空教室</h1>
-          <p class="brand-subtitle">极简 · 秒级 · JAMstack v2.0</p>
-        </div>
-      </div>
-      <div class="header-actions">
-        <button id="themeToggleBtn" class="btn-icon" title="切换主题" aria-label="切换深色/浅色模式">🌙</button>
-      </div>
+<header class="app-header">
+  <div class="header-container">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M9.5 19.5v-5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+      <h1 class="brand-title">天工大空教室</h1>
     </div>
-  </header>
+    <button id="themeToggleBtn" class="btn-icon" aria-label="切换深色或浅色模式">
+      <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
 
-  <!-- Main Application Body -->
-  <main class="main-content">
+<main class="main-content">
 
-    <!-- Data Honesty Banner (P0: 失败必须可见) -->
-    <div id="staleDataBanner" style="display:none; background:#fff7ed; border:1px solid #fdba74; color:#9a3412; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:14px; line-height:1.5;">
-      ⚠️ <strong>当前数据非实时抓取</strong> —— 今日自动抓取尚未成功或数据已过期，以下为最近一次成功获取的结果，仅供参考。
+  <div id="statusBar" class="status-bar" role="status">
+    <span id="statusDot" class="status-dot" data-state="loading"></span>
+    <span id="statusText" class="status-text">正在读取教室数据…</span>
+  </div>
+
+  <div id="staleBanner" class="banner" role="alert" hidden>
+    <strong>当前数据非实时</strong>
+    <span id="staleDetail">今日自动抓取尚未成功，以下为最近一次成功获取的结果。</span>
+  </div>
+
+  <div id="pwaInstallBanner" class="banner banner-quiet" hidden>
+    <span>添加到主屏幕，免浏览器地址栏</span>
+    <button id="installPwaBtn" class="btn-quiet">添加</button>
+  </div>
+
+  <section class="panel" aria-labelledby="slotHeading">
+    <h2 id="slotHeading" class="panel-title">目标节次</h2>
+    <div id="slotGrid" class="slot-grid" role="group" aria-label="选择节次"></div>
+    <label class="toggle">
+      <input type="checkbox" id="allDayCheckbox">
+      <span>只看全天无课的教室</span>
+    </label>
+  </section>
+
+  <div class="controls">
+    <div class="search-box">
+      <input type="search" id="searchInput" class="search-input" placeholder="搜房号或楼层，如 C419 或 3" aria-label="搜索教室">
     </div>
+    <select id="sortSelect" class="select" aria-label="排序方式">
+      <option value="room_asc">按房号</option>
+      <option value="cap_desc">按容量</option>
+      <option value="free_slots">按连空节数</option>
+    </select>
+  </div>
 
-    <!-- PWA Installation Banner -->
-    <div id="pwaInstallBanner" class="pwa-banner" style="display: none;">
-      <div class="pwa-text">💡 添加到主屏幕，体验免浏览器 App 级全屏极速查询</div>
-      <button id="installPwaBtn" class="btn-pwa">添加桌面</button>
-    </div>
+  <div id="capChips" class="chip-row" role="group" aria-label="按容量筛选">
+    <button class="chip is-active" data-cap="all">不限</button>
+    <button class="chip" data-cap="s">小 &lt;80</button>
+    <button class="chip" data-cap="m">中 80–149</button>
+    <button class="chip" data-cap="l">大 ≥150</button>
+  </div>
 
-    <!-- Time Detection & Recommendation Card -->
-    <div class="time-status-card">
-      <div class="time-info-group">
-        <span id="liveClock" class="live-clock-badge">08:20</span>
-        <div id="recommendedSlotText" class="recommend-text">
-          读取时间中...
-        </div>
-      </div>
-    </div>
+  <div id="skeleton" class="skeleton" aria-hidden="true">
+    <div class="skeleton-row"></div>
+    <div class="skeleton-row"></div>
+    <div class="skeleton-row"></div>
+    <div class="skeleton-row"></div>
+  </div>
 
-    <!-- Building Capsule Tabs -->
-    <nav class="building-tabs-wrapper" aria-label="教学楼选择">
-      <div id="buildingTabs" class="building-tabs">
-        <!-- Dynamically rendered: 全部, 第一公共教学楼, 第二公共教学楼 -->
-      </div>
-    </nav>
+  <div id="buildingGroups" class="building-groups" aria-live="polite"></div>
 
-    <!-- Time Slot Selector Matrix (5 Big Slots) -->
-    <section class="slot-section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <span>🕒 目标节次 (五大节)</span>
-        </h2>
-        <label class="all-day-toggle">
-          <input type="checkbox" id="allDayCheckbox">
-          <span>全天无课</span>
-        </label>
-      </div>
-      <div id="slotGrid" class="slot-grid" style="grid-template-columns: repeat(5, 1fr);">
-        <!-- Dynamically rendered 5 big slots -->
-      </div>
-    </section>
+  <div id="emptyState" class="notice" hidden>
+    <p class="notice-title">没有符合条件的教室</p>
+    <p class="notice-desc">试着放宽节次或容量条件。</p>
+  </div>
 
-    <!-- Search & Sort Controls Bar -->
-    <div class="controls-bar">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="searchInput" class="search-input" placeholder="搜索房号/教学楼/智慧多媒体 (如 A101, 101)...">
-      </div>
-      <select id="sortSelect" class="sort-select" aria-label="排序规则">
-        <option value="room_asc">房号升序</option>
-        <option value="cap_desc">容量从大到小</option>
-        <option value="free_slots">空闲节数最多</option>
-      </select>
-    </div>
+  <div id="errorState" class="notice" hidden>
+    <p class="notice-title">无法加载数据</p>
+    <p class="notice-desc">网络不可用，或 data/today.json 缺失。此处不会显示任何推测数据。</p>
+  </div>
 
-    <!-- Results Count Bar -->
-    <div class="results-summary">
-      <div>共找到 <span id="resultsCount" class="results-count">0</span> 间空教室</div>
-      <div id="updatedAtText">获取中...</div>
-    </div>
+</main>
 
-    <!-- Classroom Card Grid -->
-    <section id="classroomList" class="classroom-list" aria-live="polite">
-      <!-- Classroom Cards rendered by app.js -->
-    </section>
-
-    <!-- Empty Filter State -->
-    <div id="emptyState" class="empty-state" style="display: none;">
-      <div class="empty-icon">🍵</div>
-      <div class="empty-title">当前节次暂无空闲教室</div>
-      <div class="empty-desc">尝试取消部分节次选择或切换至第一/第二公共教学楼</div>
-    </div>
-
-  </main>
-
-  <!-- Application Logic -->
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

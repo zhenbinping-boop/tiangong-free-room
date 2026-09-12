@@ -1,116 +1,95 @@
 /**
- * TIANGONG FREE CLASSROOM - PWA APPLICATION LOGIC (PRD v2.0)
- * High-performance 5-bit bitmask filtering & local time auto-matching.
+ * TIANGONG FREE CLASSROOM — 空间优先的楼层浏览
+ *
+ * 信息架构：楼栋 → 楼层（空闲概览）→ 教室行。节次降为二级维度。
+ * 数据诚实性：source / data_date 决定状态栏与横幅，任何情况下不生成替代数据。
  */
 
-// Application State
 const state = {
   data: null,
-  selectedBuilding: 'ALL', // 'ALL', '第一公共教学楼', '第二公共教学楼'
   selectedSlots: new Set(),
   allDayFree: false,
   searchQuery: '',
+  cap: 'all',
   sortBy: 'room_asc',
-  theme: localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  expanded: new Set(),
+  theme: localStorage.getItem('theme')
+    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 };
 
-// DOM References
 const dom = {
-  buildingTabs: document.getElementById('buildingTabs'),
+  statusDot: document.getElementById('statusDot'),
+  statusText: document.getElementById('statusText'),
+  staleBanner: document.getElementById('staleBanner'),
+  staleDetail: document.getElementById('staleDetail'),
+  pwaBanner: document.getElementById('pwaInstallBanner'),
+  installBtn: document.getElementById('installPwaBtn'),
   slotGrid: document.getElementById('slotGrid'),
   allDayCheckbox: document.getElementById('allDayCheckbox'),
   searchInput: document.getElementById('searchInput'),
   sortSelect: document.getElementById('sortSelect'),
-  classroomList: document.getElementById('classroomList'),
-  resultsCount: document.getElementById('resultsCount'),
-  updatedAtText: document.getElementById('updatedAtText'),
-  liveClock: document.getElementById('liveClock'),
-  recommendedSlotText: document.getElementById('recommendedSlotText'),
-  themeToggleBtn: document.getElementById('themeToggleBtn'),
+  capChips: document.getElementById('capChips'),
+  skeleton: document.getElementById('skeleton'),
+  buildingGroups: document.getElementById('buildingGroups'),
   emptyState: document.getElementById('emptyState'),
-  pwaInstallBanner: document.getElementById('pwaInstallBanner'),
-  installPwaBtn: document.getElementById('installPwaBtn')
+  errorState: document.getElementById('errorState'),
+  themeToggleBtn: document.getElementById('themeToggleBtn')
 };
 
-let deferredPrompt = null;
+const CAP_RANGES = { s: [0, 79], m: [80, 149], l: [150, Infinity] };
 
-// Initialize Application
+let deferredPrompt = null;
+let searchTimer = null;
+
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initTimeDetector();
-  fetchScheduleData();
   bindEvents();
+  fetchScheduleData();
   registerServiceWorker();
 });
 
-// Theme Management
+/* ---------------------------------------------------------------- 主题 */
+
 function initTheme() {
   document.documentElement.setAttribute('data-theme', state.theme);
-  updateThemeIcon();
 }
 
 function toggleTheme() {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
   localStorage.setItem('theme', state.theme);
-  document.documentElement.setAttribute('data-theme', state.theme);
-  updateThemeIcon();
+  initTheme();
 }
 
-function updateThemeIcon() {
-  if (dom.themeToggleBtn) {
-    dom.themeToggleBtn.textContent = state.theme === 'dark' ? '☀️' : '🌙';
-  }
-}
+/* ------------------------------------------------------- 当前节次推荐 */
 
-// Auto Time Slot Recommendation (PRD v2.0 5-Slot Rules)
 function getAutoSlotNumber() {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes <= 10 * 60) return 1;          // 10:00 前 -> 第1大节 (08:20-10:00)
-  if (minutes <= 12 * 60 + 30) return 2;     // 12:30 前 -> 第2大节 (10:20-12:00)
-  if (minutes <= 15 * 60 + 40) return 3;     // 15:40 前 -> 第3大节 (14:00-15:40)
-  if (minutes <= 17 * 60 + 40) return 4;     // 17:40 前 -> 第4大节 (16:00-17:40)
-  return 5;                                  // 17:40 后 -> 第5大节 (18:30-20:10)
+  if (minutes <= 10 * 60) return 1;
+  if (minutes <= 12 * 60 + 30) return 2;
+  if (minutes <= 15 * 60 + 40) return 3;
+  if (minutes <= 17 * 60 + 40) return 4;
+  return 5;
 }
 
 function initTimeDetector() {
-  updateLiveClock();
-  setInterval(updateLiveClock, 10000);
-}
-
-function updateLiveClock() {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const timeStr = `${hours}:${minutes}`;
-
-  if (dom.liveClock) {
-    dom.liveClock.textContent = timeStr;
-  }
-
-  const autoSlot = getAutoSlotNumber();
-  const slotNames = ["", "第1大节 (08:20-10:00)", "第2大节 (10:20-12:00)", "第3大节 (14:00-15:40)", "第4大节 (16:00-17:40)", "第5大节 (18:30-20:10)"];
-
-  if (dom.recommendedSlotText) {
-    dom.recommendedSlotText.innerHTML = `已根据当前时间推荐 <span>${slotNames[autoSlot]}</span>`;
-  }
-
-  // Auto select on first load if user hasn't selected manually
   if (state.selectedSlots.size === 0 && !state.allDayFree) {
-    state.selectedSlots.add(autoSlot);
+    state.selectedSlots.add(getAutoSlotNumber());
   }
 }
 
-// Data Fetching
+/* ------------------------------------------------------------- 数据层 */
+
 async function fetchScheduleData() {
   const paths = ['./data/today.json', '../public/data/today.json'];
-  let fetchedData = null;
+  let data = null;
 
   for (const path of paths) {
     try {
-      const resp = await fetch(path);
+      const resp = await fetch(path, { cache: 'no-store' });
       if (resp.ok) {
-        fetchedData = await resp.json();
+        data = await resp.json();
         break;
       }
     } catch (e) {
@@ -118,271 +97,338 @@ async function fetchScheduleData() {
     }
   }
 
-  if (!fetchedData) {
-    console.error('Could not load classroom JSON data');
-    renderErrorState();
+  dom.skeleton.hidden = true;
+
+  if (!data || !Array.isArray(data.classrooms)) {
+    dom.statusDot.dataset.state = 'error';
+    dom.statusText.textContent = '数据加载失败';
+    dom.buildingGroups.hidden = true;
+    dom.errorState.hidden = false;
     return;
   }
 
-  state.data = fetchedData;
-
-  // P0 数据诚实性检查：source 非 live，或数据日期不是今天 → 显示横幅
-  const staleBanner = document.getElementById('staleDataBanner');
-  if (staleBanner) {
-    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' }); // YYYY-MM-DD
-    const isStale = fetchedData.source !== 'live' || (fetchedData.data_date && fetchedData.data_date !== todayStr);
-    staleBanner.style.display = isStale ? 'block' : 'none';
-  }
-
-  if (dom.updatedAtText && fetchedData.updated_at) {
-    const timeOnly = fetchedData.updated_at.split(' ')[1] || fetchedData.updated_at;
-    dom.updatedAtText.textContent = `更新于 ${timeOnly}`;
-  }
-
-  renderBuildingTabs();
-  renderSlotGrid();
-  renderClassrooms();
+  state.data = data;
+  applyFreshness(data);
+  renderSlots();
+  render();
 }
 
-// UI Event Handlers
-function bindEvents() {
-  if (dom.themeToggleBtn) {
-    dom.themeToggleBtn.addEventListener('click', toggleTheme);
-  }
+function shanghaiToday() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+}
 
-  if (dom.allDayCheckbox) {
-    dom.allDayCheckbox.addEventListener('change', (e) => {
-      state.allDayFree = e.target.checked;
-      renderSlotGrid();
-      renderClassrooms();
-    });
-  }
+function applyFreshness(data) {
+  const today = shanghaiToday();
+  const stale = data.source !== 'live' || (data.data_date && data.data_date !== today);
 
-  if (dom.searchInput) {
-    dom.searchInput.addEventListener('input', (e) => {
-      state.searchQuery = e.target.value.trim().toLowerCase();
-      renderClassrooms();
-    });
+  dom.staleBanner.hidden = !stale;
+  if (stale) {
+    dom.staleDetail.textContent = data.data_date
+      ? `最近一次成功抓取是 ${formatDate(data.data_date)}，不是今天。`
+      : '今日自动抓取尚未成功，以下为最近一次成功获取的结果。';
   }
+  return stale;
+}
 
-  if (dom.sortSelect) {
-    dom.sortSelect.addEventListener('change', (e) => {
-      state.sortBy = e.target.value;
-      renderClassrooms();
-    });
+function formatDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return String(iso || '未知日期');
+  return `${Number(m[2])}月${Number(m[3])}日`;
+}
+
+function formatClock(stamp) {
+  const m = /(\d{2}:\d{2})/.exec(String(stamp || ''));
+  return m ? m[1] : '';
+}
+
+/* ------------------------------------------------------------- 渲染层 */
+
+function targetMask() {
+  if (state.allDayFree) return 31;
+  let mask = 0;
+  for (const n of state.selectedSlots) {
+    const slot = (state.data.time_slots || []).find(s => s.slot === n);
+    if (slot) mask |= slot.mask;
   }
+  return mask;
+}
 
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    if (dom.pwaInstallBanner) {
-      dom.pwaInstallBanner.style.display = 'flex';
+function floorOf(room) {
+  const m = /\d/.exec(String(room.r || ''));
+  return m ? m[0] : '?';
+}
+
+function longestFreeRun(occ) {
+  const slots = state.data.time_slots || [];
+  let best = 0;
+  let run = 0;
+  for (const slot of slots) {
+    if ((occ & slot.mask) === 0) {
+      run += 1;
+      if (run > best) best = run;
+    } else {
+      run = 0;
     }
-  });
-
-  if (dom.installPwaBtn) {
-    dom.installPwaBtn.addEventListener('click', async () => {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`User prompt outcome: ${outcome}`);
-        deferredPrompt = null;
-        dom.pwaInstallBanner.style.display = 'none';
-      }
-    });
   }
+  return best;
 }
 
-// Render Building Capsules (第一公共教学楼, 第二公共教学楼)
-function renderBuildingTabs() {
-  if (!dom.buildingTabs) return;
+function matchesCapacity(room) {
+  if (state.cap === 'all') return true;
+  const range = CAP_RANGES[state.cap];
+  if (!range) return true;
+  const seats = Number(room.c);
+  if (!Number.isFinite(seats)) return false;
+  return seats >= range[0] && seats <= range[1];
+}
 
-  // 楼栋标签由真实数据推导，避免出现"有标签但无数据"的空楼栋
-  const present = [...new Set((state.data.classrooms || []).map(r => r.b))];
-  const buildings = [{ key: 'ALL', label: '全部' }].concat(
-    present.map(b => ({ key: b, label: b.replace('公共教学楼', '公教') }))
-  );
-  if (!buildings.some(b => b.key === state.selectedBuilding)) {
-    state.selectedBuilding = 'ALL';
+function matchesSearch(room) {
+  if (!state.searchQuery) return true;
+  const q = state.searchQuery;
+  if (String(room.r || '').toLowerCase().includes(q)) return true;
+  if (String(room.b || '').toLowerCase().includes(q)) return true;
+  return floorOf(room) === q;
+}
+
+function sortRooms(list) {
+  const copy = list.slice();
+  copy.sort((a, b) => {
+    if (state.sortBy === 'cap_desc') return Number(b.c) - Number(a.c);
+    if (state.sortBy === 'free_slots') {
+      const diff = longestFreeRun(b.occ) - longestFreeRun(a.occ);
+      if (diff !== 0) return diff;
+    }
+    return String(a.r).localeCompare(String(b.r), undefined, { numeric: true });
+  });
+  return copy;
+}
+
+function render() {
+  if (!state.data) return;
+
+  const mask = targetMask();
+  const all = state.data.classrooms || [];
+
+  // 非时间维度先过滤，楼层概览的分母才与用户看到的筛选一致
+  const base = all.filter(r => matchesCapacity(r) && matchesSearch(r));
+
+  const buildings = new Map();
+  for (const room of base) {
+    const b = room.b || '未知楼栋';
+    if (!buildings.has(b)) buildings.set(b, new Map());
+    const floors = buildings.get(b);
+    const f = floorOf(room);
+    if (!floors.has(f)) floors.set(f, []);
+    floors.get(f).push(room);
   }
 
-  dom.buildingTabs.innerHTML = buildings.map(b => `
-    <button class="tab-btn ${state.selectedBuilding === b.key ? 'active' : ''}" data-building="${b.key}">
-      ${b.label}
-    </button>
+  let totalFree = 0;
+  let html = '';
+
+  for (const [building, floors] of buildings) {
+    const floorRows = [];
+    let buildingFree = 0;
+    let buildingTotal = 0;
+
+    for (const floor of [...floors.keys()].sort()) {
+      const rooms = floors.get(floor);
+      const free = rooms.filter(r => (r.occ & mask) === 0);
+      buildingTotal += rooms.length;
+      buildingFree += free.length;
+
+      const key = `${building}::${floor}`;
+      const open = state.expanded.has(key);
+      const allFull = free.length === 0;
+
+      floorRows.push(`
+        <li class="floor ${allFull ? 'is-full' : ''}">
+          <button class="floor-head" type="button" aria-expanded="${open}" aria-controls="rooms-${cssId(key)}" data-floor="${escapeAttr(key)}">
+            <span class="floor-name">${escapeHtml(floor)} 层</span>
+            <span class="floor-count">${allFull ? '本层无空' : `${free.length}/${rooms.length} 空闲`}</span>
+            <span class="chevron" aria-hidden="true"></span>
+          </button>
+          <ul class="room-list" id="rooms-${cssId(key)}" ${open ? '' : 'hidden'}>
+            ${open ? renderRooms(free, allFull, rooms.length) : ''}
+          </ul>
+        </li>
+      `);
+    }
+
+    if (buildingTotal === 0) continue;
+    totalFree += buildingFree;
+
+    html += `
+      <section class="building">
+        <h2 class="building-name">${escapeHtml(building)}
+          <span class="building-meta">${buildingFree}/${buildingTotal} 空闲</span>
+        </h2>
+        <ul class="floor-list">${floorRows.join('')}</ul>
+      </section>
+    `;
+  }
+
+  dom.buildingGroups.innerHTML = html;
+  dom.buildingGroups.hidden = html === '';
+  dom.emptyState.hidden = html !== '';
+
+  updateStatusBar(totalFree, base.length, mask);
+  bindFloorToggles();
+}
+
+function renderRooms(freeRooms, allFull, floorTotal) {
+  if (allFull) {
+    return `<li class="room-hint">本层所选节次全满（共 ${floorTotal} 间），换一个节次看看。</li>`;
+  }
+  return sortRooms(freeRooms).map(room => `
+    <li class="room">
+      <span class="room-no">${escapeHtml(room.r)}</span>
+      <span class="room-seats">${escapeHtml(String(room.c))} 座</span>
+      <span class="room-run">连空 ${longestFreeRun(room.occ)} 节</span>
+      <span class="room-slots" role="img" aria-label="${slotSummary(room.occ)}">
+        ${(state.data.time_slots || []).map(s => `
+          <span class="seg ${(room.occ & s.mask) === 0 ? 'is-free' : 'is-busy'}" title="${escapeAttr(s.name)}：${(room.occ & s.mask) === 0 ? '空闲' : '有课'}"></span>
+        `).join('')}
+      </span>
+    </li>
   `).join('');
-
-  dom.buildingTabs.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const b = e.target.getAttribute('data-building');
-      state.selectedBuilding = b;
-      renderBuildingTabs();
-      renderClassrooms();
-    });
-  });
 }
 
-// Render Time Slot Grid (5 Big Slots)
-function renderSlotGrid() {
+function slotSummary(occ) {
+  return (state.data.time_slots || [])
+    .map(s => `${s.name}${(occ & s.mask) === 0 ? '空闲' : '有课'}`)
+    .join('，');
+}
+
+function updateStatusBar(free, total, mask) {
+  const data = state.data;
+  const stale = data.source !== 'live' || (data.data_date && data.data_date !== shanghaiToday());
+  const when = `${formatDate(data.data_date)} ${formatClock(data.updated_at)}`.trim();
+  const suffix = mask === 0 ? '未选节次' : `${free}/${total} 空闲`;
+
+  dom.statusDot.dataset.state = stale ? 'stale' : 'live';
+  const label = when ? `${when} 抓取` : '抓取时间未知';
+  dom.statusText.textContent = `${label}${stale ? '（非实时）' : ''} · ${suffix}`;
+}
+
+function renderSlots() {
   if (!dom.slotGrid || !state.data) return;
 
-  dom.slotGrid.innerHTML = state.data.time_slots.map(slot => {
-    const isSelected = state.allDayFree || state.selectedSlots.has(slot.slot);
+  dom.slotGrid.innerHTML = (state.data.time_slots || []).map(slot => {
+    const on = state.allDayFree || state.selectedSlots.has(slot.slot);
     return `
-      <div class="slot-chip ${isSelected ? 'selected' : ''}" data-slot="${slot.slot}">
-        <span class="name">${slot.name}</span>
-        <span class="time">${slot.time}</span>
-      </div>
+      <button class="slot-chip ${on ? 'is-on' : ''}" type="button" data-slot="${slot.slot}" aria-pressed="${on}">
+        <span class="slot-name">${escapeHtml(slot.name)}</span>
+        <span class="slot-time">${escapeHtml(slot.time)}</span>
+      </button>
     `;
   }).join('');
 
   dom.slotGrid.querySelectorAll('.slot-chip').forEach(chip => {
-    chip.addEventListener('click', (e) => {
+    chip.addEventListener('click', () => {
       if (state.allDayFree) {
         state.allDayFree = false;
-        if (dom.allDayCheckbox) dom.allDayCheckbox.checked = false;
+        dom.allDayCheckbox.checked = false;
         state.selectedSlots.clear();
       }
-
-      const slotNum = parseInt(chip.getAttribute('data-slot'), 10);
-      if (state.selectedSlots.has(slotNum)) {
-        if (state.selectedSlots.size > 1) {
-          state.selectedSlots.delete(slotNum);
-        }
+      const n = parseInt(chip.getAttribute('data-slot'), 10);
+      if (state.selectedSlots.has(n)) {
+        if (state.selectedSlots.size > 1) state.selectedSlots.delete(n);
       } else {
-        state.selectedSlots.add(slotNum);
+        state.selectedSlots.add(n);
       }
-
-      renderSlotGrid();
-      renderClassrooms();
+      renderSlots();
+      render();
     });
   });
 }
 
-// Bitmask Protocol Filter (occ & mask === 0)
-function renderClassrooms() {
-  if (!dom.classroomList || !state.data) return;
+function bindFloorToggles() {
+  dom.buildingGroups.querySelectorAll('.floor-head').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-floor');
+      if (open) state.expanded.delete(key); else state.expanded.add(key);
+      render();
+    });
+  });
+}
 
-  let targetMask = 0;
-  if (state.allDayFree) {
-    targetMask = 31; // 1 | 2 | 4 | 8 | 16 = 31
-  } else {
-    for (const slotNum of state.selectedSlots) {
-      const slotObj = state.data.time_slots.find(s => s.slot === slotNum);
-      if (slotObj) {
-        targetMask |= slotObj.mask;
-      }
-    }
+/* ------------------------------------------------------------- 事件绑定 */
+
+function bindEvents() {
+  if (dom.themeToggleBtn) dom.themeToggleBtn.addEventListener('click', toggleTheme);
+
+  if (dom.allDayCheckbox) {
+    dom.allDayCheckbox.addEventListener('change', e => {
+      state.allDayFree = e.target.checked;
+      renderSlots();
+      render();
+    });
   }
 
-  let filtered = state.data.classrooms.filter(room => {
-    // 1. Building match
-    if (state.selectedBuilding !== 'ALL' && room.b !== state.selectedBuilding) {
-      return false;
-    }
+  if (dom.searchInput) {
+    dom.searchInput.addEventListener('input', e => {
+      clearTimeout(searchTimer);
+      const value = e.target.value;
+      searchTimer = setTimeout(() => {
+        state.searchQuery = value.trim().toLowerCase();
+        render();
+      }, 150);
+    });
+  }
 
-    // 2. 5-Bit Bitmask protocol: (room.occ & targetMask) === 0
-    if ((room.occ & targetMask) !== 0) {
-      return false;
-    }
+  if (dom.sortSelect) {
+    dom.sortSelect.addEventListener('change', e => {
+      state.sortBy = e.target.value;
+      render();
+    });
+  }
 
-    // 3. Search query filter
-    if (state.searchQuery) {
-      const q = state.searchQuery;
-      const fullId = `${room.b}${room.r}`.toLowerCase();
-      const type = room.t.toLowerCase();
-      if (!fullId.includes(q) && !room.r.toLowerCase().includes(q) && !type.includes(q)) {
-        return false;
-      }
-    }
+  if (dom.capChips) {
+    dom.capChips.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        state.cap = chip.getAttribute('data-cap');
+        dom.capChips.querySelectorAll('.chip').forEach(c => c.classList.toggle('is-active', c === chip));
+        render();
+      });
+    });
+  }
 
-    return true;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (dom.pwaBanner) dom.pwaBanner.hidden = false;
   });
 
-  // Sorting
-  filtered.sort((a, b) => {
-    if (state.sortBy === 'cap_desc') {
-      return b.c - a.c;
-    } else if (state.sortBy === 'free_slots') {
-      const freeA = countFreeSlots(a.occ);
-      const freeB = countFreeSlots(b.occ);
-      return freeB - freeA;
-    } else {
-      return a.r.localeCompare(b.r, undefined, { numeric: true });
-    }
-  });
-
-  if (dom.resultsCount) {
-    dom.resultsCount.textContent = filtered.length;
-  }
-
-  if (filtered.length === 0) {
-    dom.classroomList.style.display = 'none';
-    if (dom.emptyState) dom.emptyState.style.display = 'block';
-    return;
-  }
-
-  if (dom.emptyState) dom.emptyState.style.display = 'none';
-  dom.classroomList.style.display = 'grid';
-
-  dom.classroomList.innerHTML = filtered.map(room => renderRoomCard(room)).join('');
-}
-
-function countFreeSlots(occ) {
-  let count = 0;
-  for (const slot of state.data.time_slots) {
-    if ((occ & slot.mask) === 0) count++;
-  }
-  return count;
-}
-
-// Classroom Card Renderer with 5-Slot Timeline Bar
-function renderRoomCard(room) {
-  const timeSlots = state.data.time_slots;
-  const shortBuildingName = room.b === '第一公共教学楼' ? '第一公教' : (room.b === '第二公共教学楼' ? '第二公教' : room.b);
-
-  const timelineHtml = timeSlots.map(slot => {
-    const isFree = (room.occ & slot.mask) === 0;
-    return `
-      <div class="timeline-slot ${isFree ? 'free' : 'busy'}" title="${slot.name}: ${isFree ? '空闲' : '有课'}">
-        <div class="slot-indicator"></div>
-        <div class="slot-label">${slot.name}</div>
-      </div>
-    `;
-  }).join('');
-
-  return `
-    <div class="classroom-card">
-      <div class="card-header">
-        <div class="room-title-group">
-          <span class="room-building">${shortBuildingName}</span>
-          <span class="room-name">${room.r}</span>
-        </div>
-        <div class="room-badges">
-          <span class="badge badge-capacity">${room.c}座</span>
-          ${room.t ? `<span class="badge">${room.t}</span>` : ''}
-        </div>
-      </div>
-      <div class="timeline-bar grid-5">
-        ${timelineHtml}
-      </div>
-    </div>
-  `;
-}
-
-function renderErrorState() {
-  if (dom.classroomList) {
-    dom.classroomList.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">⚠️</div>
-        <div class="empty-title">无法加载数据</div>
-        <div class="empty-desc">请检查网络连接或确认 data/today.json 结构</div>
-      </div>
-    `;
+  if (dom.installBtn) {
+    dom.installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      dom.pwaBanner.hidden = true;
+    });
   }
 }
 
-// Service Worker Registration for PWA
+/* --------------------------------------------------------------- 工具 */
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function cssId(key) {
+  return key.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
