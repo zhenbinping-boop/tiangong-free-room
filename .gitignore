@@ -4,6 +4,14 @@ __pycache__/
 *$py.class
 .pytest_cache/
 
+# 本地凭据（严禁入库；CI 请用 GitHub Secrets）
+.env
+.env.*
+cookies.json
+
+# 抓包样本（体积大，仅本地调试用）
+crawler/fixtures/
+
 # OS / IDE
 .DS_Store
 Thumbs.db

@@ -34,13 +34,20 @@ def is_classroom_free(occupied_mask: int, slot_mask: int) -> bool:
 def format_today_data(
     classrooms_raw: List[Dict[str, Any]],
     term: str = "2026-2027-1",
-    updated_at: str = None
+    updated_at: str = None,
+    source: str = "live",
+    data_date: str = None,
 ) -> Dict[str, Any]:
     """
     Cleans raw classroom data and generates standardized JSON structure matching PRD v2.0.
+
+    source: "live" = 实时抓取的真实数据；其他值（如 "reset"）表示非实时，前端据此显示提示横幅。
+    data_date: 数据所属日期（北京时间 YYYY-MM-DD），前端据此判断"数据是不是今天的"。
     """
     if updated_at is None:
         updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if data_date is None:
+        data_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
     processed_classrooms = []
     for item in classrooms_raw:
@@ -67,6 +74,8 @@ def format_today_data(
 
     return {
         "updated_at": updated_at,
+        "data_date": data_date,
+        "source": source,
         "buildings": TARGET_BUILDINGS,
         "time_slots": TIME_SLOTS,
         "classrooms": processed_classrooms

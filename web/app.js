@@ -126,6 +126,14 @@ async function fetchScheduleData() {
 
   state.data = fetchedData;
 
+  // P0 数据诚实性检查：source 非 live，或数据日期不是今天 → 显示横幅
+  const staleBanner = document.getElementById('staleDataBanner');
+  if (staleBanner) {
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' }); // YYYY-MM-DD
+    const isStale = fetchedData.source !== 'live' || (fetchedData.data_date && fetchedData.data_date !== todayStr);
+    staleBanner.style.display = isStale ? 'block' : 'none';
+  }
+
   if (dom.updatedAtText && fetchedData.updated_at) {
     const timeOnly = fetchedData.updated_at.split(' ')[1] || fetchedData.updated_at;
     dom.updatedAtText.textContent = `更新于 ${timeOnly}`;
@@ -189,11 +197,14 @@ function bindEvents() {
 function renderBuildingTabs() {
   if (!dom.buildingTabs) return;
 
-  const buildings = [
-    { key: 'ALL', label: '全部' },
-    { key: '第一公共教学楼', label: '第一公教' },
-    { key: '第二公共教学楼', label: '第二公教' }
-  ];
+  // 楼栋标签由真实数据推导，避免出现"有标签但无数据"的空楼栋
+  const present = [...new Set((state.data.classrooms || []).map(r => r.b))];
+  const buildings = [{ key: 'ALL', label: '全部' }].concat(
+    present.map(b => ({ key: b, label: b.replace('公共教学楼', '公教') }))
+  );
+  if (!buildings.some(b => b.key === state.selectedBuilding)) {
+    state.selectedBuilding = 'ALL';
+  }
 
   dom.buildingTabs.innerHTML = buildings.map(b => `
     <button class="tab-btn ${state.selectedBuilding === b.key ? 'active' : ''}" data-building="${b.key}">
@@ -349,7 +360,7 @@ function renderRoomCard(room) {
         </div>
         <div class="room-badges">
           <span class="badge badge-capacity">${room.c}座</span>
-          <span class="badge">${room.t}</span>
+          ${room.t ? `<span class="badge">${room.t}</span>` : ''}
         </div>
       </div>
       <div class="timeline-bar grid-5">

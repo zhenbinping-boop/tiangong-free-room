@@ -2,8 +2,8 @@ name: Daily Tiangong Classroom Data Crawler & Deploy
 
 on:
   schedule:
-    # Trigger daily at 19:00 UTC (03:00 AM Beijing Time)
-    - cron: '0 19 * * *'
+    # UTC 22:00 = 北京时间 06:00（每日清晨更新当天数据；原 19:00 UTC 对应北京凌晨 3 点且因 UTC 时区取错"天"）
+    - cron: '0 22 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -43,7 +43,7 @@ jobs:
         env:
           TIANGONG_USERNAME: ${{ secrets.TIANGONG_USERNAME }}
           TIANGONG_PASSWORD: ${{ secrets.TIANGONG_PASSWORD }}
-          TIANGONG_COOKIE: ${{ secrets.TIANGONG_COOKIE }}
+          TZ: Asia/Shanghai
         run: |
           python crawler/fetch_rooms.py
 
