@@ -16,6 +16,7 @@
 import os
 import sys
 import json
+import shutil
 import argparse
 import datetime
 from typing import List, Dict, Any, Optional, Tuple  # noqa: F401
@@ -115,15 +116,20 @@ def build_today_json(username: str = "", password: str = "") -> None:
     )
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    target_paths = [
-        os.path.join(base_dir, "public", "data", "today.json"),
-        os.path.join(base_dir, "web", "data", "today.json"),
-    ]
-    for target_path in target_paths:
-        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-        with open(target_path, "w", encoding="utf-8") as f:
-            json.dump(output, f, ensure_ascii=False, indent=2)
-        print(f"[Crawler] today.json 已写入 ({len(output['classrooms'])} 间教室, source=live) -> {target_path}")
+    canonical = os.path.join(base_dir, "public", "data", "today.json")
+    published = os.path.join(base_dir, "web", "data", "today.json")
+
+    # 只序列化一次，第二份用文件复制。
+    # 分别 dump 两遍是在给自己制造"两份不一致"的机会——同一份数据不该有两次序列化。
+    os.makedirs(os.path.dirname(canonical), exist_ok=True)
+    with open(canonical, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print(f"[Crawler] today.json 已写入 ({len(output['classrooms'])} 间教室, source=live) -> {canonical}")
+
+    # web/data/ 是 GitHub Pages 的发布副本，必须存在（publish_dir: ./web）
+    os.makedirs(os.path.dirname(published), exist_ok=True)
+    shutil.copyfile(canonical, published)
+    print(f"[Crawler] 发布副本已同步 -> {published}")
 
 
 if __name__ == "__main__":

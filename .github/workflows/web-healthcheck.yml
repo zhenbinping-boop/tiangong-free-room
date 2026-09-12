@@ -1,0 +1,46 @@
+name: Live Site Health Check
+
+# 独立于抓取流程的线上体检（PRD FR-7.3）。
+# 抓取与部署成功 ≠ 用户看到的东西是对的：gh-pages 可能没更新、CDN 可能还在发旧副本。
+# 这一步只看线上真实响应，失败即红，由 GitHub Actions 的失败通知把问题推给人。
+#
+# 为什么单独一个 workflow：抓取任务里做体检会互相掩盖——抓取失败时体检根本不会跑，
+# 而"抓取成功但线上没更新"恰恰是更需要暴露的组合。
+
+on:
+  schedule:
+    # UTC 23:00 = 北京时间 07:00，比抓取（06:00）晚一小时，留出部署时间
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-live:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check Live Site
+        run: |
+          python tools/check_live.py
+
+      - name: Summarize Failure
+        if: failure()
+        run: |
+          {
+            echo "### 线上体检未通过"
+            echo ""
+            echo "线上站点返回的数据或页面不是当前版本。请检查："
+            echo "1. 抓取 workflow（Daily Tiangong Classroom Data Crawler & Deploy）最近一次是否成功"
+            echo "2. gh-pages 分支是否已更新到最新提交"
+            echo "3. 本地复现：\`python tools/check_live.py\`"
+          } >> "$GITHUB_STEP_SUMMARY"

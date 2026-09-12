@@ -47,11 +47,18 @@ jobs:
         run: |
           python crawler/fetch_rooms.py
 
+      # 抓取脚本退出码 0 只说明它没崩，不说明产物可信。
+      # 这一关在提交之前把"结构不对 / 日期不对 / 两份不一致 / source 不是 live"全部拦住。
+      - name: Verify Crawled Data
+        run: |
+          python crawler/verify_data.py
+
       - name: Fetch and Sync Latest Remote Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
+          # 不加 `|| true`：pull 失败必须让流水线红，而不是带着可能过期的基线继续 push
+          git pull --rebase origin main
 
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -59,7 +66,6 @@ jobs:
           commit_message: "chrono: auto-update today.json schedule data [skip ci]"
           file_pattern: "public/data/today.json web/data/today.json"
           skip_dirty_check: true
-          push_options: '--force-with-lease'
 
       - name: Deploy to GitHub Pages (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
