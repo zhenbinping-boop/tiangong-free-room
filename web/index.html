@@ -6,12 +6,29 @@
   <title>天工大空教室 · 按楼栋楼层查</title>
 
   <meta name="description" content="天津工业大学空教室查询：按楼栋、楼层查看第一与第二公共教学楼的空闲教室，数据每日自动抓取自教务系统。">
-  <meta name="theme-color" content="#0369a1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f4f4f5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="天工空教室">
 
   <link rel="manifest" href="manifest.json">
+
+  <!-- 主题必须在样式表之前定下来：否则深色偏好的用户会先看到一帧浅色，
+       同时状态栏颜色也要在首帧就正确。 -->
+  <script>
+    (function () {
+      var theme;
+      try { theme = localStorage.getItem('theme'); } catch (e) { theme = null; }
+      if (theme !== 'light' && theme !== 'dark') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'dark' ? '#0c0c0e' : '#f4f4f5');
+    })();
+  </script>
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -74,7 +91,7 @@
             <div id="capChips" class="chip-row" role="group" aria-label="按容量筛选">
               <button class="chip is-active" type="button" data-cap="all">不限</button>
               <button class="chip" type="button" data-cap="s">小 &lt;80</button>
-              <button class="chip" type="button" data-cap="m">中 80–149</button>
+              <button class="chip" type="button" data-cap="m">中 80-149</button>
               <button class="chip" type="button" data-cap="l">大 ≥150</button>
             </div>
           </div>

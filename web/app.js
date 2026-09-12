@@ -63,8 +63,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ---------------------------------------------------------------- 主题 */
 
+const THEME_COLORS = { light: '#f4f4f5', dark: '#0c0c0e' };
+
+/* 首帧由 index.html 里的内联脚本先定，这里负责切换时的同步：
+   浏览器状态栏颜色要跟着主题走，否则深色模式顶着一个浅色条。 */
 function initTheme() {
   document.documentElement.setAttribute('data-theme', state.theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_COLORS[state.theme] || THEME_COLORS.light);
 }
 
 function toggleTheme() {
