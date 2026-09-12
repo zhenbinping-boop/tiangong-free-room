@@ -57,8 +57,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # 不加 `|| true`：pull 失败必须让流水线红，而不是带着可能过期的基线继续 push
-          git pull --rebase origin main
+          # 不加 `|| true`：pull 失败必须让流水线红，而不是带着可能过期的基线继续 push。
+          # --autostash 必须带着：跑到这一步时工作区里是刚抓取、刚过门禁的 today.json（有意
+          # 未提交），rebase 会因未暂存改动拒绝执行（exit 128），首跑已实际触发。
+          # autostash 临时收起这些改动、rebase 后弹回；弹回若冲突仍会失败，严格性不丢。
+          git pull --rebase --autostash origin main
 
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
