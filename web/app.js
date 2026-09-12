@@ -100,19 +100,20 @@ function initTimeDetector() {
 /* ------------------------------------------------------------- 数据层 */
 
 async function fetchScheduleData() {
-  const paths = ['./data/today.json', '../public/data/today.json'];
+  /* 只认发布目录内的这一份。曾经还有一个回退到仓库源文件的路径，
+     那份在 gh-pages 上根本不存在 —— 留着只会掩盖真实错误。 */
+  const path = './data/today.json';
   let data = null;
 
-  for (const path of paths) {
-    try {
-      const resp = await fetch(path, { cache: 'no-store' });
-      if (resp.ok) {
-        data = await resp.json();
-        break;
-      }
-    } catch (e) {
-      console.warn(`Failed to load data from ${path}`, e);
+  try {
+    const resp = await fetch(path, { cache: 'no-store' });
+    if (resp.ok) {
+      data = await resp.json();
+    } else {
+      console.error(`Failed to load data from ${path}: HTTP ${resp.status}`);
     }
+  } catch (e) {
+    console.error(`Failed to load data from ${path}`, e);
   }
 
   dom.skeleton.hidden = true;
