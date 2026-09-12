@@ -19,7 +19,7 @@
 <header class="app-header">
   <div class="header-container">
     <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
         <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
         <path d="M9.5 19.5v-5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
       </svg>
@@ -35,14 +35,13 @@
       </svg>
     </button>
   </div>
-</header>
-
-<main class="main-content">
-
-  <div id="statusBar" class="status-bar" role="status">
+  <div class="status-bar" role="status">
     <span id="statusDot" class="status-dot" data-state="loading"></span>
     <span id="statusText" class="status-text">正在读取教室数据…</span>
   </div>
+</header>
+
+<main class="main-content">
 
   <div id="staleBanner" class="banner" role="alert" hidden>
     <strong>当前数据非实时</strong>
@@ -54,31 +53,56 @@
     <button id="installPwaBtn" class="btn-quiet">添加</button>
   </div>
 
-  <section class="panel" aria-labelledby="slotHeading">
-    <h2 id="slotHeading" class="panel-title">目标节次</h2>
-    <div id="slotGrid" class="slot-grid" role="group" aria-label="选择节次"></div>
-    <label class="toggle">
-      <input type="checkbox" id="allDayCheckbox">
-      <span>只看全天无课的教室</span>
-    </label>
-  </section>
-
   <div class="controls">
-    <div class="search-box">
-      <input type="search" id="searchInput" class="search-input" placeholder="搜房号或楼层，如 C419 或 3" aria-label="搜索教室">
+    <div id="slotGrid" class="slot-row" role="group" aria-label="选择节次"></div>
+
+    <div class="controls-row">
+      <div class="search-box">
+        <input type="search" id="searchInput" class="search-input" placeholder="搜房号或楼层，如 C419 或 3" aria-label="搜索教室">
+      </div>
+
+      <details class="more" id="moreFilters">
+        <summary class="more-summary">
+          <span>筛选</span>
+          <span class="more-badge" id="filterBadge" hidden></span>
+        </summary>
+        <div class="more-body">
+          <div class="field">
+            <span class="field-label">容量</span>
+            <div id="capChips" class="chip-row" role="group" aria-label="按容量筛选">
+              <button class="chip is-active" type="button" data-cap="all">不限</button>
+              <button class="chip" type="button" data-cap="s">小 &lt;80</button>
+              <button class="chip" type="button" data-cap="m">中 80–149</button>
+              <button class="chip" type="button" data-cap="l">大 ≥150</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="sortSelect">排序</label>
+            <select id="sortSelect" class="select" aria-label="排序方式">
+              <option value="room_asc">按房号</option>
+              <option value="cap_desc">按容量</option>
+              <option value="free_slots">按连空节数</option>
+            </select>
+          </div>
+
+          <label class="toggle">
+            <input type="checkbox" id="showBusyCheckbox">
+            <span>显示有课的教室</span>
+          </label>
+
+          <p class="legend">
+            <span class="legend-item"><i class="seg is-free"></i>空闲</span>
+            <span class="legend-item"><i class="seg is-busy"></i>有课</span>
+            <span class="legend-note">每间教室下方五格，依次对应五大节</span>
+          </p>
+        </div>
+      </details>
     </div>
-    <select id="sortSelect" class="select" aria-label="排序方式">
-      <option value="room_asc">按房号</option>
-      <option value="cap_desc">按容量</option>
-      <option value="free_slots">按连空节数</option>
-    </select>
   </div>
 
-  <div id="capChips" class="chip-row" role="group" aria-label="按容量筛选">
-    <button class="chip is-active" data-cap="all">不限</button>
-    <button class="chip" data-cap="s">小 &lt;80</button>
-    <button class="chip" data-cap="m">中 80–149</button>
-    <button class="chip" data-cap="l">大 ≥150</button>
+  <div class="content-toolbar">
+    <button id="collapseAllBtn" class="link-btn" type="button">全部收起</button>
   </div>
 
   <div id="skeleton" class="skeleton" aria-hidden="true">
