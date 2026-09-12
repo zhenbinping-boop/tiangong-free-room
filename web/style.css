@@ -83,6 +83,13 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* [hidden] 只有浏览器默认样式 display:none，会被下面的 .banner{display:flex}
+   / .skeleton{display:flex} / .building-groups{display:grid} / .room-grid{display:grid}
+   压掉，必须显式兜底，否则隐藏全失效。 */
+[hidden] {
+  display: none !important;
+}
+
 body {
   background: var(--bg-page);
   color: var(--text);
@@ -498,12 +505,21 @@ body {
   gap: var(--sp-2);
 }
 
+.skeleton-label,
 .skeleton-row {
-  height: 96px;
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
   animation: pulse 1.2s ease-in-out infinite;
 }
+
+.skeleton-label {
+  height: 14px;
+  width: 40%;
+  margin-top: var(--sp-2);
+}
+
+/* 与楼层卡（表头 + 芯片网格）同高，避免加载完成后页面跳动 */
+.skeleton-row { height: 132px; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -511,6 +527,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .skeleton-label,
   .skeleton-row { animation: none; }
 }
 
