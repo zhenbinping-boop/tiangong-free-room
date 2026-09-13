@@ -48,7 +48,8 @@ jobs:
       - name: Build release APK
         working-directory: android/webview-shell
         env:
-          KEYSTORE_FILE: app/release.keystore
+          # 必须绝对路径：模块内 file() 相对 app/ 解析，写相对路径会拼成 app/app/...
+          KEYSTORE_FILE: ${{ github.workspace }}/android/webview-shell/app/release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}

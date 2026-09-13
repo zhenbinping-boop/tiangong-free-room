@@ -19,7 +19,17 @@ android {
             // 密钥只在 CI 里通过环境变量注入，仓库内不保存任何密钥材料。
             def ks = System.getenv("KEYSTORE_FILE")
             if (ks != null) {
-                storeFile file(ks)
+                // 注意：模块里的 file() 是相对 app/ 解析的，曾把 KEYSTORE_FILE=app/release.keystore
+                // 拼成 app/app/release.keystore 导致 validateSigningRelease 失败。
+                // 相对路径统一按 Gradle 根项目目录（android/webview-shell/）解析。
+                def ksFile = new File(ks)
+                if (!ksFile.isAbsolute()) {
+                    ksFile = rootProject.file(ks)
+                }
+                if (!ksFile.exists()) {
+                    throw new GradleException("KEYSTORE_FILE 指向的文件不存在: ${ksFile}")
+                }
+                storeFile ksFile
                 storePassword System.getenv("KEYSTORE_PASSWORD")
                 keyAlias System.getenv("KEY_ALIAS")
                 keyPassword System.getenv("KEY_PASSWORD")
