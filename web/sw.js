@@ -12,7 +12,7 @@
  * 文件名不带指纹，若用 stale-while-revalidate，发版后老用户会长期停在旧版本。
  */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `tiangong-room-${CACHE_VERSION}`;
 
 /* 预缓存只放本地一定存在的文件。
@@ -21,6 +21,7 @@ const CACHE_NAME = `tiangong-room-${CACHE_VERSION}`;
 const PRECACHE = [
   './',
   './index.html',
+  './download.html',
   './style.css',
   './app.js',
   './manifest.json',

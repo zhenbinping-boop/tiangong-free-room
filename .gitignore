@@ -17,3 +17,12 @@ crawler/fixtures/
 Thumbs.db
 .vscode/
 .idea/
+
+# Android 签名密钥（丢失即无法再给同一批用户发更新，严禁入库）
+android/*.keystore
+android/*.jks
+# 密钥密码等本机说明同样不入库
+android/release.keystore*
+
+# 临时产物
+.keystore-fingerprint.tmp

@@ -863,6 +863,58 @@ h1, h2, h3, button, input, select, summary, label, span, p {
   color: var(--text-muted);
 }
 
+/* ------------------------------------------------------------- 说明面板 */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+}
+
+.page-title {
+  font-size: var(--fs-display);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.panel-title {
+  font-size: var(--fs-title);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.panel-desc {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.panel-desc strong { color: var(--text); font-weight: 650; }
+
+.hint {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.btn-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+.page-foot {
+  padding: var(--sp-2) var(--sp-1);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+.page-foot a { color: var(--text-muted); }
+
 /* --------------------------------------------------- 交互反馈（指针设备） */
 
 /* 触屏上 hover 会"粘住"最后一个点过的元素，所以只在真有指针时启用 */
