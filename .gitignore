@@ -23,6 +23,14 @@ android/*.keystore
 android/*.jks
 # 密钥密码等本机说明同样不入库
 android/release.keystore*
+# 云端构建时解码到工程内的密钥副本（同样严禁入库）
+android/webview-shell/app/release.keystore
+
+# Android 构建产物
+android/webview-shell/.gradle/
+android/webview-shell/build/
+android/webview-shell/app/build/
+android/webview-shell/local.properties
 
 # 临时产物
 .keystore-fingerprint.tmp

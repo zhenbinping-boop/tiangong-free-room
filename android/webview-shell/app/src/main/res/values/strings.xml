@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">天工空教室</string>
+    <string name="error_title">暂时打不开</string>
+    <string name="error_desc">没能连上空教室网站。这里不会显示任何推测数据，恢复网络后重试即可。</string>
+    <string name="retry">重新加载</string>
+</resources>

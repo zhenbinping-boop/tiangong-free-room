@@ -1,0 +1,90 @@
+name: Build Android Shell APK
+
+# 手机壳（WebView 直壳）的云端构建。
+# 本机不需要 Android SDK：Actions 里装 SDK + Gradle，签名密钥从 Secrets 注入。
+# 构建产物会被提交到 web/download/tiangong-rooms.apk 并直接发布，
+# 所以跑完这一次，下载页拿到的就是新包。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android/webview-shell/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.5"
+
+      - name: Decode signing keystore
+        run: |
+          mkdir -p android/webview-shell/app
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/webview-shell/app/release.keystore
+          test -s android/webview-shell/app/release.keystore
+
+      - name: Build release APK
+        working-directory: android/webview-shell
+        env:
+          KEYSTORE_FILE: app/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon
+
+      - name: Verify APK signature
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | tail -1)
+          echo "using $BT"
+          "$BT"/apksigner verify --print-certs \
+            android/webview-shell/app/build/outputs/apk/release/app-release.apk
+
+      - name: Ship APK to site and deploy
+        run: |
+          cp android/webview-shell/app/build/outputs/apk/release/app-release.apk web/download/tiangong-rooms.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/download/tiangong-rooms.apk
+          if git diff --cached --quiet; then
+            echo "APK unchanged, nothing to commit"
+          else
+            git commit -m "android: refresh webview shell apk [skip ci]"
+            git pull --rebase --autostash origin main
+            git push origin main
+          fi
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web
+          force_orphan: true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiangong-rooms-shell-apk
+          path: android/webview-shell/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
