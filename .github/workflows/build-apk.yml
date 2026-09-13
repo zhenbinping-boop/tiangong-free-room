@@ -15,7 +15,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-apk
+  # 与 deploy-pages.yml 共用一组：两者都用 force_orphan 重写 gh-pages 分支，
+  # 并发执行会互相覆盖，必须串行
+  group: pages-deploy
   cancel-in-progress: false
 
 jobs:

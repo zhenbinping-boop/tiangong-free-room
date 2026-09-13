@@ -59,6 +59,25 @@ TWA 实测在国内机型上**卡在启动屏**不进入页面，开代理也一
 
 改壳再出包时，记得把 `app/build.gradle` 里的 `versionCode` +1。
 
+### 已知坑：密钥路径必须用绝对路径
+
+首跑失败于 `validateSigningRelease`，报
+`.../android/webview-shell/app/app/release.keystore not found`。
+
+原因：Gradle 模块里的 `file()` 是相对**模块目录**（`app/`）解析的，
+而 workflow 里写的是相对工程根的 `app/release.keystore`，于是拼成了 `app/app/...`。
+
+现状已修：workflow 用 `KEYSTORE_FILE: ${{ github.workspace }}/...`（绝对路径），
+`app/build.gradle` 里相对路径按 `rootProject` 解析并断言文件存在。
+**改这两处时不要退回相对路径。**
+
+### 出包后自检（直壳版）
+
+- [ ] 手机上覆盖安装成功（同包名 + 同密钥，无需卸载旧版）
+- [ ] 点开秒进页面，**不出现启动屏卡死**
+- [ ] 首页抓取日期与网页版一致
+- [ ] 断网时显示「重新加载」界面，而不是空白或旧数据
+
 ## 4. 分发与更新
 
 - 主下载源是**站内自托管**：`web/download/tiangong-rooms.apk`（与页面同域名，国内可达）。
