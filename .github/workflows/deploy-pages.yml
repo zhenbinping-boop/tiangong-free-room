@@ -1,0 +1,38 @@
+name: Deploy Web to Pages
+
+# 前端（web/）不再只能等抓取任务顺带发布。
+# 抓取任务 cron 在北京 06:00，任何前端改动若只能搭它的车，最长要等 24 小时才上线。
+# 本任务只负责「web/ 有改动 → 立即发布」，数据抓取仍由 daily-crawler.yml 独占。
+#
+# 不会与 daily-crawler 打架的原因：
+#   1. daily-crawler 的自动提交带 [skip ci]，且其 push 用的是 GITHUB_TOKEN，
+#      GitHub 不会为它再触发任何 workflow；
+#   2. 下面的 concurrency 组保证即便同一时刻有两个发布，也是串行而非互相覆盖。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 不做构建：本仓库的 web/ 就是发布产物，静态直出。
+      - name: Deploy to GitHub Pages (gh-pages branch)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web
+          force_orphan: true
