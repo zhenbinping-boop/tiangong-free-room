@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>天工大空教室 · 按楼栋楼层查</title>
+
+  <meta name="description" content="天津工业大学空教室查询：按楼栋、楼层查看第一与第二公共教学楼的空闲教室，数据每日自动抓取自教务系统。">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f4f4f5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="天工空教室">
+
+  <link rel="canonical" href="https://zhenbinping-boop.github.io/tiangong-free-room/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:site_name" content="天工大空教室">
+  <meta property="og:title" content="天工大空教室 · 按楼栋楼层查">
+  <meta property="og:description" content="按楼栋和楼层查看第一、第二公共教学楼的空闲教室，数据每日自动抓取自教务系统。">
+  <meta property="og:url" content="https://zhenbinping-boop.github.io/tiangong-free-room/">
+  <meta property="og:image" content="https://zhenbinping-boop.github.io/tiangong-free-room/icons/icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta name="twitter:card" content="summary">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- 主题必须在样式表之前定下来：否则深色偏好的用户会先看到一帧浅色，
+       同时状态栏颜色也要在首帧就正确。 -->
+  <script>
+    (function () {
+      var theme;
+      try { theme = localStorage.getItem('theme'); } catch (e) { theme = null; }
+      if (theme !== 'light' && theme !== 'dark') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'dark' ? '#0c0c0e' : '#f4f4f5');
+    })();
+  </script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-container">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M9.5 19.5v-5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+      <h1 class="brand-title">天工大空教室</h1>
+    </div>
+    <button id="themeToggleBtn" class="btn-icon" aria-label="切换深色或浅色模式">
+      <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+  <div class="status-bar" role="status">
+    <span id="statusDot" class="status-dot" data-state="loading"></span>
+    <span id="statusText" class="status-text">正在读取教室数据…</span>
+  </div>
+</header>
+
+<main class="main-content">
+
+  <div id="staleBanner" class="banner" role="alert" hidden>
+    <strong>当前数据非实时</strong>
+    <span id="staleDetail">今日自动抓取尚未成功，以下为最近一次成功获取的结果。</span>
+  </div>
+
+  <div id="pwaInstallBanner" class="banner banner-quiet" hidden>
+    <span id="pwaInstallText">添加到主屏幕，免浏览器地址栏</span>
+    <span class="banner-actions">
+      <button id="installPwaBtn" class="btn-quiet" type="button">添加</button>
+      <button id="installDismissBtn" class="link-btn" type="button">暂不</button>
+    </span>
+  </div>
+
+  <div class="controls">
+    <div id="buildingTabs" class="seg-row" role="group" aria-label="选择楼栋"></div>
+
+    <div id="slotGrid" class="slot-row" role="group" aria-label="选择节次"></div>
+
+    <div class="controls-row">
+      <div class="search-box">
+        <input type="search" id="searchInput" class="search-input" placeholder="搜房号或楼层，如 C419 或 3" aria-label="搜索教室">
+      </div>
+
+      <details class="more" id="moreFilters">
+        <summary class="more-summary">
+          <span>筛选</span>
+          <span class="more-badge" id="filterBadge" hidden></span>
+        </summary>
+        <div class="more-body">
+          <div class="field">
+            <span class="field-label">容量</span>
+            <div id="capChips" class="chip-row" role="group" aria-label="按容量筛选">
+              <button class="chip is-active" type="button" data-cap="all">不限</button>
+              <button class="chip" type="button" data-cap="s">小 &lt;80</button>
+              <button class="chip" type="button" data-cap="m">中 80-149</button>
+              <button class="chip" type="button" data-cap="l">大 ≥150</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="sortSelect">排序</label>
+            <select id="sortSelect" class="select" aria-label="排序方式">
+              <option value="room_asc">按房号</option>
+              <option value="cap_desc">按容量</option>
+              <option value="free_slots">按连空节数</option>
+            </select>
+          </div>
+
+          <label class="toggle">
+            <input type="checkbox" id="showBusyCheckbox">
+            <span>显示有课的教室</span>
+          </label>
+
+          <p class="legend">
+            <span class="legend-item"><i class="seg is-free"></i>空闲</span>
+            <span class="legend-item"><i class="seg is-busy"></i>有课</span>
+            <span class="legend-note">每间教室下方五格，依次对应五大节</span>
+          </p>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="content-toolbar">
+    <label class="switch" id="defaultWrap" hidden>
+      <input type="checkbox" id="defaultBuildingCheck">
+      <span id="defaultBuildingLabel">设为默认</span>
+    </label>
+    <button id="collapseAllBtn" class="link-btn" type="button">全部收起</button>
+  </div>
+
+  <div id="skeleton" class="skeleton" aria-hidden="true">
+    <div class="skeleton-label"></div>
+    <div class="skeleton-row"></div>
+    <div class="skeleton-row"></div>
+    <div class="skeleton-row"></div>
+  </div>
+
+  <div id="buildingGroups" class="building-groups" aria-live="polite"></div>
+
+  <div id="emptyState" class="notice" hidden>
+    <p class="notice-title">没有符合条件的教室</p>
+    <p class="notice-desc">试着放宽节次或容量条件。</p>
+  </div>
+
+  <div id="errorState" class="notice" hidden>
+    <p class="notice-title">无法加载数据</p>
+    <p class="notice-desc">网络不可用，或 data/today.json 缺失。此处不会显示任何推测数据。</p>
+  </div>
+
+  <p class="page-foot">
+    <a href="./download.html">把本站装到手机</a>
+  </p>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
