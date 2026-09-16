@@ -25,10 +25,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from parser import format_today_data, TIME_SLOTS, TARGET_BUILDINGS  # noqa: E402
 from jwxs_client import JwxsClient, JwxsError  # noqa: E402
-from rooms_parser import records_from_spare_rooms  # noqa: E402
+from rooms_parser import records_from_slot_rooms  # noqa: E402
 
 # 一天的小节数（第1节 ~ 第10节；五大节 = 1-2 / 3-4 / 5-6 / 7-8 / 9-10）
 PERIODS_PER_DAY = 10
+
+# 服务端支持逗号分隔的多个小节，并取**交集**返回（实测确认，见 rooms_parser.records_from_slot_rooms）。
+# 因此每个大节用一次查询即可，每栋 10 次请求 → 5 次。
+SLOT_PERIODS: Dict[int, str] = {
+    1: "1,2",
+    2: "3,4",
+    3: "5,6",
+    4: "7,8",
+    5: "9,10",
+}
 
 
 def build_today_json(username: str = "", password: str = "") -> None:
@@ -86,8 +96,9 @@ def build_today_json(username: str = "", password: str = "") -> None:
                 continue
             campus_number, building_number, campus_name = targets[name]
             client.select_building(campus_number, building_number, campus_name)
-            period_rooms = client.fetch_all_periods(range(1, PERIODS_PER_DAY + 1), dayplus=0)
-            recs = records_from_spare_rooms(period_rooms, verbose=False)
+            slot_rooms = {slot: client.fetch_free_rooms(expr, dayplus=0)
+                          for slot, expr in SLOT_PERIODS.items()}
+            recs = records_from_slot_rooms(slot_rooms, verbose=False)
             # 单楼栋视图下 acmcBuildingName 即目标楼栋；为空则补上
             for r in recs:
                 if not r.get("building"):

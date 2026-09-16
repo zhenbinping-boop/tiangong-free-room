@@ -11,7 +11,18 @@ TIME_SLOTS = [
     { "slot": 5, "name": "第5大节", "time": "18:30-20:10", "mask": 16 }
 ]
 
-TARGET_BUILDINGS = ["第一公共教学楼", "第二公共教学楼"]
+# 北区这两栋在教务系统里各自独立（每栋都要单独 select_building 再查五大节），
+# 界面上归入「北区」这一级，与两栋公教平级。
+# 实训A / 实训B 曾一并纳入，2026-09-16 剔除：实测各仅 1 间空闲教室，收益不抵请求成本。
+# 覆盖范围到此定稿，此后不再新增楼栋。
+NORTH_BUILDINGS = ["教学B", "教学C"]
+
+TARGET_BUILDINGS = ["第一公共教学楼", "第二公共教学楼"] + NORTH_BUILDINGS
+
+# 楼栋 → 界面分组（today.json 里的 g 字段）。未列出的楼栋自成一组（g = 楼栋名）。
+# 注意：TARGET_BUILDINGS 按楼栋名精确匹配教务系统返回的楼栋字典，
+# 名字对不上只会打一行警告然后安静地少数据，改名时务必同步这里。
+BUILDING_GROUPS = {name: "北区" for name in NORTH_BUILDINGS}
 
 def parse_slot_to_mask(occupied_slots: List[int]) -> int:
     """
@@ -66,6 +77,7 @@ def format_today_data(
         processed_classrooms.append({
             "id": f"{building_name}-{room_no}",
             "b": building_name,
+            "g": BUILDING_GROUPS.get(building_name, building_name),
             "r": room_no,
             "c": item.get("c", item.get("capacity", 120)),
             "t": item.get("t", item.get("type", "多媒体")),

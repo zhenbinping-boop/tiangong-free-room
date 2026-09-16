@@ -138,6 +138,54 @@ def records_from_spare_rooms(period_rooms: Dict[int, List[dict]], verbose: bool 
     return records
 
 
+def records_from_slot_rooms(slot_rooms: Dict[int, List[dict]], verbose: bool = False) -> List[Dict[str, Any]]:
+    """
+    首选数据源（多节合并查询版）：
+        GET /student/teachingResources/freeClassroom/today/{p1},{p2}?dayplus=0
+
+    服务端对**逗号分隔的多个小节取交集** —— 返回的是"这些小节都空闲"的教室集合。
+    2026-09-16 实测确认（西区第一公共教学楼，89 间逐间比对）：
+      五个大节全部符合交集语义，且与逐小节查询构建的 occ 掩码**完全一致，0 处差异**。
+    因此每大节只需 1 次请求，每栋 10 次 → 5 次。
+
+    slot_rooms: {大节号 1..5: spareroomObjList}（大节号 = (1,2)/(3,4)/(5,6)/(7,8)/(9,10)）
+
+    判定：教室出现在某大节的返回里 = 该大节空闲；未出现 = 该大节至少一节被占用。
+    """
+    info: Dict[tuple, Dict[str, Any]] = {}
+    for slot in sorted(slot_rooms):
+        for b in slot_rooms[slot] or []:
+            bname = (b.get("acmcBuildingName") or "").strip()
+            for room in (b.get("claroom") or []):
+                name = (room.get("classroom") or "").strip()
+                if not name:
+                    continue
+                key = (bname, name.upper())
+                try:
+                    cap = int(str(room.get("classNumberOfSeats") or "0").strip())
+                except ValueError:
+                    cap = 0
+                entry = info.setdefault(key, {
+                    "building": bname, "room": name, "capacity": cap, "free_slots": set()
+                })
+                entry["free_slots"].add(slot)
+
+    records = []
+    for entry in info.values():
+        busy = [s for s in range(1, 6) if s not in entry["free_slots"]]
+        records.append({
+            "building": entry["building"],
+            "room": entry["room"],
+            "capacity": entry["capacity"],
+            "type": "",
+            "busy": busy,
+        })
+
+    if verbose:
+        print(f"[rooms_parser] 多节合并查询：{len(info)} 间教室")
+    return records
+
+
 def to_records(html: str, building: str = "", verbose: bool = False) -> List[Dict[str, Any]]:
     """（备用）从单楼栋 HTML 页面解析。HTTP 接口不可用时才走这条路。"""
     parsed = parse_free_classroom_html(html)
