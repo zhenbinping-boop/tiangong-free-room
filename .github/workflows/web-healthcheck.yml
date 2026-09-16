@@ -9,8 +9,9 @@ name: Live Site Health Check
 
 on:
   schedule:
-    # UTC 23:00 = 北京时间 07:00，比抓取（06:00）晚一小时，留出部署时间
-    - cron: '0 23 * * *'
+    # UTC 21:00 = 北京时间 05:00，比抓取（04:00）晚一小时，留出部署时间
+    # 2026-09-16 随抓取同步提前 2 小时：两个任务吃同一份 GitHub 延迟，必须一起提前才维持相对顺序。
+    - cron: '0 21 * * *'
   workflow_dispatch:
 
 permissions:
