@@ -379,6 +379,15 @@ h1, h2, h3, button, input, select, summary, label, span, p {
   border: 1px solid var(--border);
 }
 
+/* 上面这条基础规则与 .seg-btn.is-on 同特异性且更靠后，会把选中背景压回灰底，
+   而选中字色仍是近白的 --on-ink —— 白字融进浅灰底，看起来发虚（09-16 实测事故）。
+   这里用更高特异性把选中态夺回来。 */
+.seg-row-sub .seg-btn.is-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+
 .slot-row {
   display: flex;
   gap: 6px;

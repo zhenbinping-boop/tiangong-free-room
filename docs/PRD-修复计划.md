@@ -458,7 +458,7 @@ python tools/check_live.py
 
 **定义：代码冻结。** 期间除以下两类情况外，不改动任何代码与配置：
 
-1. 数据链路中断（当日 06:00 未产出 `source=live` 数据）；
+1. 数据链路中断（当日抓取任务未产出 `source=live` 数据）；
 2. 线上与本地不一致（体检任务报红）。
 
 **唯一考核目标**：连续 7 天 `source=live`、`data_date` = 当天、无人工干预。
@@ -470,8 +470,11 @@ python tools/check_live.py
 
 | 时间（北京） | 任务 | 作用 |
 |---|---|---|
-| 06:00 | `daily-crawler.yml` | 抓取 → `verify_data` 门禁 → 提交 → 发布；任一步失败即变红并触发 GitHub 失败邮件 |
-| 07:00 | `web-healthcheck.yml` | 比对线上与本地 `web/index.html`（标题 + 全部元素 id），确认线上就是当前这版 |
+| 04:00 | `daily-crawler.yml` | 抓取（含服务端翻篇校验）→ `verify_data` 门禁 → 提交 → 发布；任一步失败即变红并触发 GitHub 失败邮件 |
+| 05:00 | `web-healthcheck.yml` | 比对线上与本地 `web/index.html`（标题 + 全部元素 id），确认线上就是当前这版 |
+
+> **注**：2026-09-16 两个 cron 已从 06:00 / 07:00 各提前 2 小时（`0 20 * * *` / `0 21 * * *` UTC），
+> 用来对冲 GitHub 定时任务 1.5–2 小时的调度延迟；实际落库仍可能晚于名义时间。
 
 **出口判定**：
 
