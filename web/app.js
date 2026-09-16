@@ -425,7 +425,17 @@ function render() {
   }
 
   state.floorKeys = keys;
+
+  // 只有"数据真的换了"（楼栋 / 节次 / 筛选 / 排序）才淡入；
+  // 单纯改搜索词不重放动画，否则每敲一次字整屏都在闪。
+  const swapToken = [state.group, state.building, state.showBusy, state.cap,
+                     state.sortBy, state.allDayFree,
+                     [...state.selectedSlots].sort().join(',')].join('|');
+  const swapped = swapToken !== state.renderToken;
+  state.renderToken = swapToken;
+
   dom.buildingGroups.innerHTML = html;
+  dom.buildingGroups.dataset.animate = swapped ? '1' : '0';
   dom.buildingGroups.hidden = html === '';
   dom.emptyState.hidden = html !== '';
 
@@ -570,14 +580,15 @@ function renderRooms(rooms, allFull, floorTotal, mask) {
   if (rooms.length === 0) {
     return `<li class="room-hint">本层没有符合条件的教室。</li>`;
   }
-  return rooms.map(room => {
+  // i 只用于入场错峰（CSS 变量 --i），不参与任何业务逻辑
+  return rooms.map((room, i) => {
     const free = (room.occ & mask) === 0;
     const segs = (state.data.time_slots || []).map(s => {
       const isFree = (room.occ & s.mask) === 0;
       return `<i class="seg ${isFree ? 'is-free' : 'is-busy'}"></i>`;
     }).join('');
     return `
-      <li class="room-chip ${free ? 'is-free' : 'is-busy'}">
+      <li class="room-chip ${free ? 'is-free' : 'is-busy'}" style="--i:${i}">
         <span class="rc-no">${escapeHtml(room.r)}</span>
         <span class="rc-seats">${escapeHtml(String(room.c))} 座</span>
         <span class="rc-strip" role="img" aria-label="${escapeAttr(slotSummary(room.occ))}">${segs}</span>
@@ -660,13 +671,61 @@ function updateFilterBadge() {
   dom.filterBadge.textContent = String(n);
 }
 
+/* 楼层展开/收起 —— 零依赖动画
+   render() 是整块 innerHTML 重建，重建后任何进行中的动画都会连 DOM 一起被丢掉，
+   所以折叠/展开不再走 render()，只动当前这一层的节点。
+   动画用浏览器自带的 Web Animations API，不引第三方库。
+   注意：style.css 里的 prefers-reduced-motion 只管得住 CSS 动画，
+   管不到 JS 起的动画，所以这里必须再判一次（GSAP 里对应 gsap.matchMedia()）。 */
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const FLOOR_ANIM_MS = 180;
+
+function floorGridOf(headBtn) {
+  const card = headBtn.closest ? headBtn.closest('.floor-card') : null;
+  return card ? card.querySelector('.room-grid') : null;
+}
+
+function setFloorOpen(headBtn, open) {
+  const grid = floorGridOf(headBtn);
+  if (!grid) return;
+
+  headBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) grid.hidden = false;
+
+  if (typeof grid.animate !== 'function' || reduceMotion.matches) {
+    grid.hidden = !open;
+    return;
+  }
+
+  // 连续点击时先掐掉上一段，否则旧的 onfinish 会把刚展开的层又收起来
+  if (grid._floorAnim) grid._floorAnim.cancel();
+
+  const to = { height: `${grid.scrollHeight}px`, opacity: 1 };
+  const from = { height: '0px', opacity: 0 };
+  grid.style.overflow = 'hidden';
+
+  const anim = grid.animate(open ? [from, to] : [to, from], {
+    duration: FLOOR_ANIM_MS,
+    easing: 'cubic-bezier(0.2, 0, 0, 1)'
+  });
+  grid._floorAnim = anim;
+  // fill 默认 none，结束后内联样式自动失效，只需清掉 overflow
+  anim.onfinish = () => {
+    grid.style.overflow = '';
+    grid._floorAnim = null;
+    if (!open) grid.hidden = true;
+  };
+}
+
 function bindFloorToggles() {
   dom.buildingGroups.querySelectorAll('.floor-head').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-floor');
-      if (state.collapsed.has(key)) state.collapsed.delete(key);
-      else state.collapsed.add(key);
-      render();
+      const collapse = !state.collapsed.has(key);
+      if (collapse) state.collapsed.add(key);
+      else state.collapsed.delete(key);
+      setFloorOpen(btn, !collapse);
+      syncCollapseAllLabel();
     });
   });
 }
@@ -723,9 +782,16 @@ function bindEvents() {
 
   if (dom.collapseAllBtn) {
     dom.collapseAllBtn.addEventListener('click', () => {
-      if (state.collapsed.size > 0) state.collapsed.clear();
-      else state.floorKeys.forEach(k => state.collapsed.add(k));
-      render();
+      const collapseAll = state.collapsed.size === 0;
+      state.collapsed.clear();
+      if (collapseAll) state.floorKeys.forEach(k => state.collapsed.add(k));
+
+      // 与单个楼层同一条路径：只动已有节点，不整页重建（重建会掐掉动画）
+      dom.buildingGroups.querySelectorAll('.floor-head').forEach(btn => {
+        const key = btn.getAttribute('data-floor');
+        setFloorOpen(btn, !state.collapsed.has(key));
+      });
+      syncCollapseAllLabel();
     });
   }
 

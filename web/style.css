@@ -829,6 +829,23 @@ h1, h2, h3, button, input, select, summary, label, span, p {
   line-height: 1.2;
 }
 
+/* 入场错峰：只在数据真的换了时播放（app.js 写 data-animate），
+   单纯改搜索词不重放，否则每敲一次字整屏都在闪。
+   单段 160ms、整体延迟封顶 90ms —— 走廊里"看一眼就走"，动画不能拖慢读屏。
+   另注：prefers-reduced-motion 的 CSS 兜底管不到 JS 起的动画，
+   楼层折叠那一段在 app.js 里单独判了一次。 */
+@media (prefers-reduced-motion: no-preference) {
+  .building-groups[data-animate="1"] .room-chip {
+    animation: chip-in 160ms var(--ease) both;
+    animation-delay: min(calc(var(--i, 0) * 4ms), 90ms);
+  }
+}
+
+@keyframes chip-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* 五段日条：实心 vs 空心，亮暗差 3.4:1 —— 色觉障碍下靠明暗也能读 */
 .room-chip .rc-strip {
   display: grid;
