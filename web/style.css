@@ -359,6 +359,26 @@ h1, h2, h3, button, input, select, summary, label, span, p {
 
 .seg-btn.is-on .seg-count { color: var(--free-on-ink); }
 
+/* 二级楼栋（北区里的四栋）：选中区域后才出现。
+   比一级轻一档——一级是整块分段控件，二级用独立药丸，并允许横向滚动。 */
+.seg-row-sub {
+  gap: 6px;
+  padding: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: transparent;
+  border: none;
+}
+
+.seg-row-sub::-webkit-scrollbar { display: none; }
+
+.seg-row-sub .seg-btn {
+  flex: 1 0 auto;
+  min-width: 68px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+}
+
 .slot-row {
   display: flex;
   gap: 6px;
@@ -913,7 +933,25 @@ h1, h2, h3, button, input, select, summary, label, span, p {
   text-align: center;
 }
 
-.page-foot a { color: var(--text-muted); }
+.page-foot a:not(.install-cta) { color: var(--text-muted); }
+
+/* 装到手机是唯一的长线动作，做成实心墨色按钮 —— 页脚小字链接太容易被忽略。
+   44px 高度同时也补上了 PRODUCT.md 的触控目标要求。 */
+.install-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-control);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-body);
+  font-weight: 650;
+  text-decoration: none;
+  transition: opacity var(--ease);
+}
 
 /* --------------------------------------------------- 交互反馈（指针设备） */
 
@@ -935,6 +973,7 @@ h1, h2, h3, button, input, select, summary, label, span, p {
 
   .floor-head:hover { background: var(--bg-sunken); }
   .link-btn:hover { background: var(--ink-tint); }
+  .install-cta:hover { opacity: 0.86; }
   .more-summary:hover { border-color: var(--border-strong); }
 }
 
@@ -945,7 +984,8 @@ h1, h2, h3, button, input, select, summary, label, span, p {
   .chip:active,
   .btn-icon:active,
   .btn-quiet:active,
-  .link-btn:active {
+  .link-btn:active,
+  .install-cta:active {
     transform: translateY(1px);
   }
 

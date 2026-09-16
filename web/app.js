@@ -8,6 +8,8 @@
 
 const state = {
   data: null,
+  // group = 一级（全部 / 第一公教 / 第二公教 / 北区），building = 二级（北区里的具体楼栋）
+  group: 'all',
   building: 'all',
   selectedSlots: new Set(),
   allDayFree: false,
@@ -33,6 +35,7 @@ const dom = {
   pwaInstallText: document.getElementById('pwaInstallText'),
   installDismissBtn: document.getElementById('installDismissBtn'),
   buildingTabs: document.getElementById('buildingTabs'),
+  subBuildingTabs: document.getElementById('subBuildingTabs'),
   slotGrid: document.getElementById('slotGrid'),
   defaultWrap: document.getElementById('defaultWrap'),
   defaultBuildingCheck: document.getElementById('defaultBuildingCheck'),
@@ -219,12 +222,40 @@ function setStoredBuilding(name) {
   }
 }
 
+/* 存的是"一级|二级"，如 北区|教学B；二级为全部时只存 北区。
+   老版本只存过楼栋名（没有竖线），按楼栋名反查它现在的分组。 */
+function currentSelection() {
+  return state.building === 'all' ? state.group : `${state.group}|${state.building}`;
+}
+
 function applyStoredBuilding(data) {
   const saved = storedBuilding();
   if (!saved) return;
-  const exists = (data.classrooms || []).some(r => (r.b || '未知楼栋') === saved);
-  if (exists) state.building = saved;
-  else setStoredBuilding('');
+
+  const rooms = data.classrooms || [];
+  let group = '';
+  let building = 'all';
+
+  if (saved.indexOf('|') === -1) {
+    building = saved;
+    const hit = rooms.find(r => (r.b || '未知楼栋') === building);
+    group = hit ? groupOf(hit) : building;
+  } else {
+    const parts = saved.split('|');
+    group = parts[0] || '';
+    building = parts[1] || 'all';
+  }
+
+  // 分组在数据里不存在（楼栋改名/下线）→ 清掉，别让用户困在空页面
+  if (!rooms.some(r => groupOf(r) === group)) {
+    setStoredBuilding('');
+    return;
+  }
+  state.group = group;
+
+  const buildingOk = building === 'all'
+    || rooms.some(r => groupOf(r) === group && (r.b || '未知楼栋') === building);
+  state.building = buildingOk ? building : 'all';
 }
 
 function shanghaiToday() {
@@ -320,13 +351,17 @@ function render() {
   const mask = targetMask();
   const all = state.data.classrooms || [];
 
-  // 楼栋计数要反映"切过去能有多少空"，所以先不加楼栋条件
+  // 楼栋计数要反映"切过去能有多少空"，所以先不加分组/楼栋条件
   const scoped = all.filter(r => matchesCapacity(r) && matchesSearch(r));
-  const base = state.building === 'all'
+  const inGroup = state.group === 'all'
     ? scoped
-    : scoped.filter(r => (r.b || '未知楼栋') === state.building);
+    : scoped.filter(r => groupOf(r) === state.group);
+  const base = state.building === 'all'
+    ? inGroup
+    : inGroup.filter(r => (r.b || '未知楼栋') === state.building);
 
-  renderBuildingTabs(scoped, mask);
+  renderGroupTabs(scoped, mask);
+  renderSubBuildingTabs(inGroup, mask);
 
   const buildings = new Map();
   for (const room of base) {
@@ -402,9 +437,24 @@ function render() {
 
 /* ----------------------------------------------------------- 楼栋选择 */
 
-function buildingList() {
+/* g 字段由爬虫写入。老数据没有 g，退化成"每个楼栋自成一组"，不会白屏。 */
+function groupOf(room) {
+  return room.g || room.b || '未知楼栋';
+}
+
+function groupList() {
   const seen = [];
   for (const room of state.data.classrooms || []) {
+    const g = groupOf(room);
+    if (!seen.includes(g)) seen.push(g);
+  }
+  return seen;
+}
+
+function buildingsInGroup(group) {
+  const seen = [];
+  for (const room of state.data.classrooms || []) {
+    if (groupOf(room) !== group) continue;
     const b = room.b || '未知楼栋';
     if (!seen.includes(b)) seen.push(b);
   }
@@ -415,11 +465,12 @@ function shortBuildingName(name) {
   return String(name).replace('公共教学楼', '公教');
 }
 
-function renderBuildingTabs(scoped, mask) {
+/* 一级：全部 / 第一公教 / 第二公教 / 北区 */
+function renderGroupTabs(scoped, mask) {
   if (!dom.buildingTabs) return;
 
-  const buildings = buildingList();
-  if (buildings.length <= 1) {
+  const groups = groupList();
+  if (groups.length <= 1) {
     dom.buildingTabs.hidden = true;
     return;
   }
@@ -427,24 +478,20 @@ function renderBuildingTabs(scoped, mask) {
 
   const freeIn = (list) => list.filter(r => (r.occ & mask) === 0).length;
 
-  const tabs = [{
-    key: 'all',
-    label: '全部',
-    count: freeIn(scoped)
-  }];
-  for (const b of buildings) {
+  const tabs = [{ key: 'all', label: '全部', count: freeIn(scoped) }];
+  for (const g of groups) {
     tabs.push({
-      key: b,
-      label: shortBuildingName(b),
-      count: freeIn(scoped.filter(r => (r.b || '未知楼栋') === b))
+      key: g,
+      label: shortBuildingName(g),
+      count: freeIn(scoped.filter(r => groupOf(r) === g))
     });
   }
 
   dom.buildingTabs.innerHTML = tabs.map(t => {
-    const on = state.building === t.key;
+    const on = state.group === t.key;
     return `
       <button class="seg-btn ${on ? 'is-on' : ''}" type="button"
-              data-building="${escapeAttr(t.key)}" aria-pressed="${on}">
+              data-group="${escapeAttr(t.key)}" aria-pressed="${on}">
         <span class="seg-label">${escapeHtml(t.label)}</span>
         <span class="seg-count">${t.count}</span>
       </button>
@@ -453,7 +500,53 @@ function renderBuildingTabs(scoped, mask) {
 
   dom.buildingTabs.querySelectorAll('.seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      state.building = btn.getAttribute('data-building');
+      const next = btn.getAttribute('data-group');
+      // 换分组时二级选择失效，必须回到"全部"，否则会指向不存在的楼栋
+      if (next !== state.group) state.building = 'all';
+      state.group = next;
+      render();
+    });
+  });
+}
+
+/* 二级：仅当某个分组含多栋楼时出现（目前只有北区）。
+   选「全部」时下面按楼栋分段渲染，等于"进入北区后分四栋分别查看"。 */
+function renderSubBuildingTabs(inGroup, mask) {
+  if (!dom.subBuildingTabs) return;
+
+  const buildings = state.group === 'all' ? [] : buildingsInGroup(state.group);
+  if (buildings.length <= 1) {
+    dom.subBuildingTabs.hidden = true;
+    dom.subBuildingTabs.innerHTML = '';
+    return;
+  }
+  dom.subBuildingTabs.hidden = false;
+
+  const freeIn = (list) => list.filter(r => (r.occ & mask) === 0).length;
+
+  const tabs = [{ key: 'all', label: '全部', count: freeIn(inGroup) }];
+  for (const b of buildings) {
+    tabs.push({
+      key: b,
+      label: shortBuildingName(b),
+      count: freeIn(inGroup.filter(r => (r.b || '未知楼栋') === b))
+    });
+  }
+
+  dom.subBuildingTabs.innerHTML = tabs.map(t => {
+    const on = state.building === t.key;
+    return `
+      <button class="seg-btn ${on ? 'is-on' : ''}" type="button"
+              data-sub="${escapeAttr(t.key)}" aria-pressed="${on}">
+        <span class="seg-label">${escapeHtml(t.label)}</span>
+        <span class="seg-count">${t.count}</span>
+      </button>
+    `;
+  }).join('');
+
+  dom.subBuildingTabs.querySelectorAll('.seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.building = btn.getAttribute('data-sub');
       render();
     });
   });
@@ -461,11 +554,11 @@ function renderBuildingTabs(scoped, mask) {
 
 function syncDefaultControl() {
   if (!dom.defaultWrap) return;
-  const specific = state.building !== 'all';
+  const specific = state.group !== 'all';
   dom.defaultWrap.hidden = !specific;
   if (!specific) return;
 
-  const isDefault = storedBuilding() === state.building;
+  const isDefault = storedBuilding() === currentSelection();
   dom.defaultBuildingCheck.checked = isDefault;
   dom.defaultBuildingLabel.textContent = isDefault ? '已设为默认' : '设为默认';
 }
@@ -623,7 +716,7 @@ function bindEvents() {
 
   if (dom.defaultBuildingCheck) {
     dom.defaultBuildingCheck.addEventListener('change', e => {
-      setStoredBuilding(e.target.checked ? state.building : '');
+      setStoredBuilding(e.target.checked ? currentSelection() : '');
       syncDefaultControl();
     });
   }

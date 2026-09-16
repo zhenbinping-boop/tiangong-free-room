@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>天工大空教室 · 按楼栋楼层查</title>
 
-  <meta name="description" content="天津工业大学空教室查询：按楼栋、楼层查看第一与第二公共教学楼的空闲教室，数据每日自动抓取自教务系统。">
+  <meta name="description" content="天津工业大学空教室查询：按楼栋、楼层查看第一公教、第二公教与北区（教学B / 教学C）的空闲教室，数据每日自动抓取自教务系统。">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f4f4f5">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,7 +17,7 @@
   <meta property="og:locale" content="zh_CN">
   <meta property="og:site_name" content="天工大空教室">
   <meta property="og:title" content="天工大空教室 · 按楼栋楼层查">
-  <meta property="og:description" content="按楼栋和楼层查看第一、第二公共教学楼的空闲教室，数据每日自动抓取自教务系统。">
+  <meta property="og:description" content="按楼栋和楼层查看第一公教、第二公教与北区教学楼的空闲教室，数据每日自动抓取自教务系统。">
   <meta property="og:url" content="https://zhenbinping-boop.github.io/tiangong-free-room/">
   <meta property="og:image" content="https://zhenbinping-boop.github.io/tiangong-free-room/icons/icon-512.png">
   <meta property="og:image:width" content="512">
@@ -88,7 +88,9 @@
   </div>
 
   <div class="controls">
-    <div id="buildingTabs" class="seg-row" role="group" aria-label="选择楼栋"></div>
+    <div id="buildingTabs" class="seg-row" role="group" aria-label="选择教学楼区域"></div>
+
+    <div id="subBuildingTabs" class="seg-row seg-row-sub" role="group" aria-label="选择具体楼栋" hidden></div>
 
     <div id="slotGrid" class="slot-row" role="group" aria-label="选择节次"></div>
 
@@ -165,7 +167,7 @@
   </div>
 
   <p class="page-foot">
-    <a href="./download.html">把本站装到手机</a>
+    <a class="install-cta" href="./download.html">把本站装到手机</a>
   </p>
 
 </main>
