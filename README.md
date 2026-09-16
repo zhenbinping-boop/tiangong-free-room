@@ -1,7 +1,8 @@
 # 天津工业大学空教室查询（非官方）
 
 一个查看**天津工业大学公共教学楼当前空教室**的静态站点 + 自动抓取任务。
-数据每日北京时间 06:00 由 GitHub Actions 登录教务系统真实抓取，不人工录入、不估算、不用课表反推。
+数据每日北京时间 04:00 由 GitHub Actions 登录教务系统真实抓取，不人工录入、不估算、不用课表反推。
+抓取前会校验教务系统自己的"今天"是否已翻篇，未翻篇则等待重试，绝不把昨天的数据标成今天。
 
 - 线上：https://zhenbinping-boop.github.io/tiangong-free-room/
 - Android：站点内「装到手机」页可下载 APK（或直接用 PWA「添加到主屏幕」）
@@ -15,8 +16,9 @@
 ## 它是怎么工作的
 
 ```
-GitHub Actions（北京 06:00）
-  └─ 登录教务系统 → 按大节抓取空教室（每栋 1 次切换 + 5 次查询）→ 写 today.json → 提交并发布 Pages
+GitHub Actions（北京 04:00）
+  └─ 登录教务系统 → 校验服务端"今天"已翻篇（未翻篇则每 30 分钟复查，最多 4 次）
+     → 按大节抓取空教室（每栋 1 次切换 + 5 次查询）→ 写 today.json → 提交并发布 Pages
                                   └─ verify_data 门禁：结构/日期/两份一致/source=live，任一不过就红
 浏览器 / App ── 读取同域 today.json（同一份代码，天然同步）
 ```
@@ -93,9 +95,9 @@ python tools/check_live.py        # 线上体检（比对线上与本地 web/ind
 
 | Workflow | 触发 | 作用 |
 |---|---|---|
-| `daily-crawler.yml` | 每日 `0 22 * * *` UTC（北京 06:00） | 测试 → 抓取 → `verify_data` 门禁 → 同步 → 提交 → 发布 Pages |
-| `web-healthcheck.yml` | 每日 `0 23 * * *` UTC（北京 07:00） | 线上体检：比对线上与本地 `web/index.html`（标题 + 全部元素 id） |
-| `deploy-pages.yml` | push 到 main 且 `web/**` 有改动 | 立即发布前端，不必等 06:00 |
+| `daily-crawler.yml` | 每日 `0 20 * * *` UTC（北京 04:00） | 测试 → 抓取（含服务端翻篇校验）→ `verify_data` 门禁 → 同步 → 提交 → 发布 Pages |
+| `web-healthcheck.yml` | 每日 `0 21 * * *` UTC（北京 05:00） | 线上体检：比对线上与本地 `web/index.html`（标题 + 全部元素 id） |
+| `deploy-pages.yml` | push 到 main 且 `web/**` 有改动 | 立即发布前端，不必等次日 04:00 |
 | `build-apk.yml` | 手动 / push 改 `android/webview-shell/**` | 云端构建签名 APK → 提交到 `web/download/` → 发布 |
 
 ### 需要的 Secrets
@@ -119,6 +121,7 @@ python tools/check_live.py        # 线上体检（比对线上与本地 web/ind
 | 登录失败，日志出现 `badCredentials` | 登录 | 密码变更，或密码加密公式失效（见 `docs/api-schema.md` §1.2） |
 | 抓取结果为 0 间 / 缺楼栋 | 数据接口 | 接口路径或 `position` 语义变化 —— 注意 `position` 必须是 `"{校区号}_{楼栋号}"`，只传楼号会 500 |
 | `verify_data` 报红 | 门禁 | 数据非当日、`source` 不是 `live`、两份文件不一致 |
+| 日志出现「服务端还停在…当天课表尚未刷新」 | 翻篇校验 | 教务系统的"今天"还没翻篇（多见于 04:00 那次）。脚本会自动等 30 分钟复查、最多 4 次；**4 次后仍未翻篇则拒绝写入**，当天保留昨天数据并显示「非实时」横幅 —— 这是正确行为，不是 bug。想确认某天数据有没有串天，看该文件里的 `server_day` 与 `data_date` 是否对得上 |
 | `git pull --rebase` 失败（exit 128） | 同步 | 工作区有未提交的 `today.json`；workflow 已用 `--autostash`，若仍失败多为远端有并发提交 |
 | 线上还是旧版 | 发布 | 跑 `python tools/check_live.py`；前端改动可手动触发 `Deploy Web to Pages` |
 

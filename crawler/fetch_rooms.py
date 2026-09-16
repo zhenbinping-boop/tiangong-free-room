@@ -19,11 +19,20 @@ import json
 import shutil
 import argparse
 import datetime
+import time
 from typing import List, Dict, Any, Optional, Tuple  # noqa: F401
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from parser import format_today_data, TIME_SLOTS, TARGET_BUILDINGS  # noqa: E402
+from parser import (  # noqa: E402
+    format_today_data,
+    parse_server_day,
+    server_day_matches_local,
+    beijing_today,
+    WEEKDAY_CN,
+    TIME_SLOTS,
+    TARGET_BUILDINGS,
+)
 from jwxs_client import JwxsClient, JwxsError  # noqa: E402
 from rooms_parser import records_from_slot_rooms  # noqa: E402
 
@@ -39,6 +48,58 @@ SLOT_PERIODS: Dict[int, str] = {
     4: "7,8",
     5: "9,10",
 }
+
+
+# 服务端翻篇校验：04:00 抓取时若服务端还停在昨天，就等一会儿再看。
+# 环境变量可覆盖（本地调试用 TIANGONG_DAY_RETRY=0 表示只校验、不等待）。
+DAY_CHECK_RETRIES = int(os.environ.get("TIANGONG_DAY_RETRY", "4"))
+DAY_CHECK_INTERVAL_SEC = int(os.environ.get("TIANGONG_DAY_RETRY_SEC", "1800"))
+
+
+def ensure_server_day_rolled(client) -> str:
+    """
+    确认教务系统页面的"今天"与本地北京时间一致；不一致就等待重试，直到翻篇或次数用尽。
+
+    返回服务端日期原文（如 "2026-2027 秋 第3周 星期三"）；解析不到返回 ""（不阻塞）。
+
+    为什么必须校验：data_date 用的是本地日期。若服务端还没翻篇而我们照抓，
+    得到的会是昨天的课表，却被标成今天 —— 页面显示 source=live、日期是今天，
+    没有任何报错。这属于"静默给出错误数据"，是本项目最不能接受的一类事故。
+    """
+    for attempt in range(DAY_CHECK_RETRIES + 1):
+        now = beijing_today()
+        try:
+            html = client.fetch_today_html()
+        except Exception as e:
+            # 读不到就当作无法校验：警告后继续，不因为一次网络抖动整天没数据
+            print(f"[Crawler] 警告：读取服务端日期失败（{e}），本轮不校验", file=sys.stderr)
+            return ""
+
+        day = parse_server_day(html)
+        if day is None:
+            # 页面结构变了（没有那个标记）：警告后继续，避免页面小改动就整天没数据
+            print("[Crawler] 警告：页面里找不到「第N周 星期X」标记，无法确认服务端日期，继续抓取",
+                  file=sys.stderr)
+            return ""
+
+        if server_day_matches_local(day, now):
+            print(f"[Crawler] 服务端日期校验通过：{day['raw']}"
+                  f"（本地 {now.strftime('%Y-%m-%d')} {WEEKDAY_CN[now.weekday()]}）")
+            return day["raw"]
+
+        print(f"[Crawler] 服务端还停在『{day['raw']}』，本地已是 "
+              f"{now.strftime('%Y-%m-%d')} {WEEKDAY_CN[now.weekday()]} "
+              f"—— 当天课表尚未刷新", file=sys.stderr)
+        if attempt >= DAY_CHECK_RETRIES:
+            print(f"[Crawler] 错误：等待 {DAY_CHECK_RETRIES} 次后服务端仍未翻篇，"
+                  f"拒绝写入 today.json（否则会把昨天的数据标成今天）", file=sys.stderr)
+            print("[Crawler] 保留上一次真实数据，本轮不更新 today.json", file=sys.stderr)
+            sys.exit(1)
+        print(f"[Crawler] {DAY_CHECK_INTERVAL_SEC // 60} 分钟后重试"
+              f"（{attempt + 1}/{DAY_CHECK_RETRIES}）…")
+        time.sleep(DAY_CHECK_INTERVAL_SEC)
+
+    return ""
 
 
 def build_today_json(username: str = "", password: str = "") -> None:
@@ -60,6 +121,12 @@ def build_today_json(username: str = "", password: str = "") -> None:
     except Exception as e:
         print(f"[Crawler] 登录异常：{e}", file=sys.stderr)
         sys.exit(1)
+
+    # ---- 服务端日期校验：确认教务系统的"今天"已经翻篇 ----
+    # 抓取在北京 04:00 跑。若教务系统的今天还停在昨天，抓到的就是昨天的课表 ——
+    # 而 data_date 仍会写成本地日期，等于把昨天的数据标成今天发出去且不报错（静默错误）。
+    # 页面顶部的「第N周 星期X」是服务端自己认为的今天，拿它跟本地北京时间比对。
+    server_day_raw = ensure_server_day_rolled(client)
 
     # ---- 抓取（JSON 接口：按楼栋切换 → 逐小节查询）----
     # 流程：取校区列表 → 按校区取楼栋列表 → 定位目标楼栋 → select_building 切换 → 逐小节查空闲
@@ -117,13 +184,16 @@ def build_today_json(username: str = "", password: str = "") -> None:
         print("[Crawler] 错误：所有楼栋解析结果均为空——可能页面结构变更，拒绝写入", file=sys.stderr)
         sys.exit(1)
 
-    now = datetime.datetime.now()
+    # 显式按北京时间取，不再依赖运行机器的本地时区
+    # （workflow 里设了 TZ=Asia/Shanghai，两者一致；本机跑在别的时区时这行才是保命的）
+    now = beijing_today()
     today_str = now.strftime("%Y-%m-%d")
     output = format_today_data(
         classrooms_raw=records,
         updated_at=now.strftime("%Y-%m-%d %H:%M:%S"),
         source="live",
         data_date=today_str,
+        server_day=server_day_raw,
     )
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

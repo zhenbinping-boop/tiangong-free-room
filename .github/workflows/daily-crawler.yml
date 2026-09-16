@@ -21,6 +21,9 @@ permissions:
 jobs:
   crawl-and-deploy:
     runs-on: ubuntu-latest
+    # 抓取本身只要 6 秒。留 3 小时是因为：04:00 若发现教务系统还没翻篇，
+    # 脚本会每 30 分钟复查一次、最多 4 次（见 fetch_rooms.ensure_server_day_rolled）。
+    timeout-minutes: 180
 
     steps:
       - name: Checkout Repository

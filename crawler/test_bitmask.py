@@ -1,9 +1,18 @@
 import unittest
 import sys
 import os
+import datetime as datetime_mod
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from parser import parse_slot_to_mask, is_classroom_free, TIME_SLOTS, format_today_data
+from parser import (
+    parse_slot_to_mask,
+    is_classroom_free,
+    TIME_SLOTS,
+    format_today_data,
+    parse_server_day,
+    server_day_matches_local,
+    WEEKDAY_CN,
+)
 from rooms_parser import records_from_spare_rooms, records_from_slot_rooms
 
 
@@ -158,6 +167,65 @@ class TestMultiPeriodQuery(unittest.TestCase):
         recs = records_from_slot_rooms(slot_rooms)
         self.assertEqual(recs[0]["building"], "教学B")
         self.assertEqual(recs[0]["room"], "A101")
+
+
+class TestServerDayCheck(unittest.TestCase):
+    """服务端日期校验：防止 04:00 抓到"还没翻篇"的昨天数据却被标成今天。"""
+
+    FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "fixtures", "free_classroom_today.html")
+
+    def test_parse_from_real_fixture(self):
+        # 真实页面样本（周末抓取的）：顶部是 "2026-2027 秋 第2周 星期六"
+        if not os.path.exists(self.FIXTURE):
+            self.skipTest("缺少 fixtures/free_classroom_today.html")
+        with open(self.FIXTURE, encoding="utf-8", errors="replace") as f:
+            html = f.read()
+        day = parse_server_day(html)
+        self.assertIsNotNone(day, "真实页面里应该能解析出「第N周 星期X」")
+        self.assertEqual(day["week"], 2)
+        self.assertEqual(day["weekday"], "星期六")
+
+    def test_parse_variants(self):
+        for raw, week, wd in [
+            ("2026-2027 秋 第3周 星期三", 3, "星期三"),
+            ("2026-2027 秋  第12周   星期一", 12, "星期一"),
+            ("2026-2027 春 第1周 星期日", 1, "星期日"),
+            ("2026-2027 秋 第1周 星期天", 1, "星期日"),  # 星期天 → 星期日
+        ]:
+            html = f"<li><span class='span_bbzx'> {raw}</span></li>"
+            day = parse_server_day(html)
+            self.assertIsNotNone(day, raw)
+            self.assertEqual((day["week"], day["weekday"]), (week, wd), raw)
+
+    def test_parse_returns_none_when_marker_missing(self):
+        self.assertIsNone(parse_server_day(""))
+        self.assertIsNone(parse_server_day("<html><body>没有任何学期信息</body></html>"))
+        self.assertIsNone(parse_server_day("<span class='span_bbzx'>2026-2027 秋</span>"))
+
+    def test_matches_local(self):
+        wed = datetime_mod.datetime(2026, 9, 16, 4, 0, 0)   # 星期四? 2026-09-16 是星期三
+        self.assertEqual(WEEKDAY_CN[wed.weekday()], "星期三")
+        self.assertTrue(server_day_matches_local({"weekday": "星期三"}, wed))
+        # 服务端还停在昨天（星期二），本地已是星期三 → 不匹配，必须拦下
+        self.assertFalse(server_day_matches_local({"weekday": "星期二"}, wed))
+        # 解析不到时不阻塞（按一致处理，避免页面小改动就整天没数据）
+        self.assertTrue(server_day_matches_local(None, wed))
+
+    def test_server_day_written_into_output(self):
+        out = format_today_data(
+            classrooms_raw=[{"b": "教学B", "r": "101", "c": 60, "occ": 0}],
+            updated_at="2026-09-16 04:00:00",
+            data_date="2026-09-16",
+            server_day="2026-2027 秋 第3周 星期三",
+        )
+        self.assertEqual(out["server_day"], "2026-2027 秋 第3周 星期三")
+        # 没提供时不写这个字段，老结构不受影响
+        self.assertNotIn("server_day", format_today_data(
+            classrooms_raw=[{"b": "教学B", "r": "101", "c": 60, "occ": 0}],
+            updated_at="2026-09-16 04:00:00",
+            data_date="2026-09-16",
+        ))
 
 
 if __name__ == "__main__":

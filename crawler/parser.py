@@ -1,6 +1,7 @@
 import json
+import re
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Bitmask slot definitions according to PRD v2.0 (5-bit protocol)
 TIME_SLOTS = [
@@ -42,18 +43,75 @@ def is_classroom_free(occupied_mask: int, slot_mask: int) -> bool:
     """
     return (occupied_mask & slot_mask) == 0
 
+# ---------- 服务端日期校验 ----------
+# 教务系统页面顶部会渲染学期信息，形如：
+#   <span class='span_bbzx'> 2026-2027 秋 第3周 星期三</span>
+# 这是**服务端自己认为的今天**。抓取时间提前到北京 04:00 后，必须拿它跟本地北京时间对一下：
+# 若服务端还停在昨天（页面显示星期二、本地已是星期三），说明当天课表还没翻篇，
+# 此时抓到的是昨天的数据 —— 绝不能写进 today.json（那等于把昨天的数据标成今天，且不会报错）。
+SERVER_DAY_RE = re.compile(r"<span class=[\"']span_bbzx[\"']>\s*([^<]+?)\s*</span>")
+SERVER_WEEKDAY_RE = re.compile(r"第\s*(\d+)\s*周\s*(星期[一二三四五六日天])")
+
+# 与 datetime.weekday() 顺序一致（0=周一）
+WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+
+
+def parse_server_day(html: str) -> Optional[Dict[str, Any]]:
+    """
+    从页面里解析服务端日期。返回 {"week": int, "weekday": "星期三", "raw": "..."}，
+    解析不到返回 None（页面结构变了）—— 调用方据此决定"警告继续"还是"硬失败"。
+
+    注意：这里只能拿到**星期几**和**周次**，拿不到完整日期。星期几已足够发现"差一天"，
+    而"差一天"正是我们担心的场景（服务端翻篇比本地晚）。
+    """
+    if not html:
+        return None
+    m = SERVER_DAY_RE.search(html)
+    if not m:
+        return None
+    # 页面里周次与星期之间常有多个空格，规范化后留痕更好看
+    raw = re.sub(r"\s+", " ", m.group(1)).strip()
+    w = SERVER_WEEKDAY_RE.search(raw)
+    if not w:
+        return None
+    weekday = w.group(2).replace("星期天", "星期日")
+    return {"week": int(w.group(1)), "weekday": weekday, "raw": raw}
+
+
+def beijing_today() -> datetime.datetime:
+    """当前北京时间（与 workflow 的 TZ=Asia/Shanghai 一致）。"""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.datetime.now(ZoneInfo("Asia/Shanghai"))
+    except Exception:  # 老 Python 无 zoneinfo 时退回 UTC+8
+        return datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+
+
+def server_day_matches_local(server_day: Optional[Dict[str, Any]],
+                             now: datetime.datetime = None) -> bool:
+    """服务端星期 == 本地（北京）星期。server_day 为 None 时无法判定，按 True 处理（不阻塞）。"""
+    if not server_day:
+        return True
+    if now is None:
+        now = beijing_today()
+    return server_day.get("weekday") == WEEKDAY_CN[now.weekday()]
+
+
 def format_today_data(
     classrooms_raw: List[Dict[str, Any]],
     term: str = "2026-2027-1",
     updated_at: str = None,
     source: str = "live",
     data_date: str = None,
+    server_day: str = None,
 ) -> Dict[str, Any]:
     """
     Cleans raw classroom data and generates standardized JSON structure matching PRD v2.0.
 
     source: "live" = 实时抓取的真实数据；其他值（如 "reset"）表示非实时，前端据此显示提示横幅。
     data_date: 数据所属日期（北京时间 YYYY-MM-DD），前端据此判断"数据是不是今天的"。
+    server_day: 抓取时服务端页面上的「第N周 星期X」原文，留痕用。事后怀疑串天可直接查这个文件，
+                不必重新登录教务系统。
     """
     if updated_at is None:
         updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -84,7 +142,7 @@ def format_today_data(
             "occ": int(occ_val)
         })
 
-    return {
+    result = {
         "updated_at": updated_at,
         "data_date": data_date,
         "source": source,
@@ -92,6 +150,9 @@ def format_today_data(
         "time_slots": TIME_SLOTS,
         "classrooms": processed_classrooms
     }
+    if server_day:
+        result["server_day"] = server_day
+    return result
 
 if __name__ == "__main__":
     print("Testing 5-Bit Bitmask Parser...")
