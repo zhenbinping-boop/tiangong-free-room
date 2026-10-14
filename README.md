@@ -95,7 +95,7 @@ python tools/check_live.py        # 线上体检（比对线上与本地 web/ind
 
 | Workflow | 触发 | 作用 |
 |---|---|---|
-| `daily-crawler.yml` | 每日 `0 20 * * *` UTC（北京 04:00） | 测试 → 抓取（含服务端翻篇校验）→ `verify_data` 门禁 → 同步 → 提交 → 发布 Pages |
+| `daily-crawler.yml` | 每日 `0 20 * * *` UTC（北京 04:00） | 同步最新 main → 测试 → 抓取（含服务端翻篇校验）→ `verify_data` 门禁 → 提交 → 发布 Pages |
 | `web-healthcheck.yml` | 每日 `0 21 * * *` UTC（北京 05:00） | 线上体检：比对线上与本地 `web/index.html`（标题 + 全部元素 id） |
 | `deploy-pages.yml` | push 到 main 且 `web/**` 有改动 | 立即发布前端，不必等次日 04:00 |
 | `build-apk.yml` | 手动 / push 改 `android/webview-shell/**` | 云端构建签名 APK → 提交到 `web/download/` → 发布 |
@@ -122,8 +122,10 @@ python tools/check_live.py        # 线上体检（比对线上与本地 web/ind
 | 抓取结果为 0 间 / 缺楼栋 | 数据接口 | 接口路径或 `position` 语义变化 —— 注意 `position` 必须是 `"{校区号}_{楼栋号}"`，只传楼号会 500 |
 | `verify_data` 报红 | 门禁 | 数据非当日、`source` 不是 `live`、两份文件不一致 |
 | 日志出现「服务端还停在…当天课表尚未刷新」 | 翻篇校验 | 教务系统的"今天"还没翻篇（多见于 04:00 那次）。脚本会自动等 30 分钟复查、最多 4 次；**4 次后仍未翻篇则拒绝写入**，当天保留昨天数据并显示「非实时」横幅 —— 这是正确行为，不是 bug。想确认某天数据有没有串天，看该文件里的 `server_day` 与 `data_date` 是否对得上 |
-| `git pull --rebase` 失败（exit 128） | 同步 | 工作区有未提交的 `today.json`；workflow 已用 `--autostash`，若仍失败多为远端有并发提交 |
+| 同步或数据提交步骤报错 | 同步 / 提交 | workflow 在抓取前以干净工作区执行 `git pull --ff-only`。同步失败须先查分支和工作区；抓取期间若远端 main 更新，普通 push 会拒绝并阻止部署，从最新 main 手动启动新运行即可 |
 | 线上还是旧版 | 发布 | 跑 `python tools/check_live.py`；前端改动可手动触发 `Deploy Web to Pages` |
+
+2026-10-14 修复：旧流程在抓取后执行 `git pull --rebase --autostash`，重跑旧提交时可能在恢复两份 `today.json` 的改动时产生冲突。该命令可能返回 0，直到下一步自动提交才因未解决的索引失败。现在从最新 main 开始，在抓取前同步，校验后直接提交并推送；不对 main 强推，也不忽略同步或推送错误。修改工作流后应使用 **Run workflow → main** 启动新运行来验收，重跑历史任务会继续使用其原工作流定义。
 
 **常用命令**
 
