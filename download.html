@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>装到手机 · 天工大空教室</title>
+
+  <meta name="description" content="把天工大空教室装到手机：Android 下载安装包，iPhone 用 Safari 添加到主屏幕，数据与网页完全同步。">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f4f4f5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="天工空教室">
+
+  <link rel="canonical" href="https://zhenbinping-boop.github.io/tiangong-free-room/download.html">
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+
+  <script>
+    (function () {
+      var theme;
+      try { theme = localStorage.getItem('theme'); } catch (e) { theme = null; }
+      if (theme !== 'light' && theme !== 'dark') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'dark' ? '#0c0c0e' : '#f4f4f5');
+    })();
+  </script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-container">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M9.5 19.5v-5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-title">天工大空教室</span>
+    </div>
+    <a class="link-btn" href="./index.html">查教室</a>
+  </div>
+</header>
+
+<main class="main-content">
+
+  <h1 class="page-title">装到手机</h1>
+  <p class="panel-desc">
+    App 只是这层网页的壳，两边数据完全同源。下面的方式任选其一，效果一致。
+  </p>
+
+  <section class="panel">
+    <h2 class="panel-title">Android 安装包</h2>
+    <p class="panel-desc">
+      安装包只是一个壳，打开的就是这个网站本身。<strong>数据与网页完全一致</strong>：
+      每天北京时间 06:00 自动抓取一次，两边同时更新，不存在 App 版本落后的问题。
+    </p>
+    <a id="apkLink" class="btn-quiet btn-block"
+       href="./download/tiangong-rooms.apk">
+      下载安装包
+    </a>
+    <p id="apkNote" class="hint" hidden>
+      安装包还没有上传。先回首页用「添加到主屏幕」，效果一样，不用等。
+    </p>
+    <p class="hint">
+      安装包就放在本站内，与页面同一域名，国内网络可直接下载。
+      站内若失败，可用<a href="https://github.com/zhenbinping-boop/tiangong-free-room/releases/latest/download/tiangong-rooms.apk">GitHub 备用直链</a>（部分网络较慢）。
+      未上架应用商店。安装时若提示「未知来源」，选择允许即可。
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">iPhone 与 iPad</h2>
+    <p class="panel-desc">
+      iOS 不提供这类安装包，也不允许第三方浏览器内核，所以没有 Android 那种 App 可下。
+      但效果几乎一样：用 <strong>Safari</strong> 打开首页，点底部中间的分享按钮，
+      选「添加到主屏幕」，桌面就会多出图标，点开是全屏、无地址栏。
+    </p>
+    <p class="hint">
+      注意必须是 Safari。微信、QQ 里点开的网页无法添加到桌面，
+      先点右上角「···」选择在 Safari 中打开。
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">为什么不做独立 App</h2>
+    <p class="panel-desc">
+      这个站的全部价值是「数据是教务系统的真实数据」。做成独立 App 就要维护第二套代码、
+      第二份数据通道，两边不一致时用户不知道该信哪个。
+      现在这个做法只有一个真源：网页。App 只是它的一层壳。
+    </p>
+    <p class="hint">
+      遇到问题可以回首页继续用网页版，两者数据相同，不会有任何损失。
+    </p>
+  </section>
+
+</main>
+
+<script>
+  /* 只有确认安装包不存在时才收起按钮并给出解释。
+     跨域探测失败属于"无法确认"，此时保留按钮 —— 猜错会让用户以为有下载却点空。 */
+  (function () {
+    var link = document.getElementById('apkLink');
+    var note = document.getElementById('apkNote');
+    if (!link || !note) return;
+    fetch(link.getAttribute('href'), { method: 'HEAD' })
+      .then(function (r) {
+        if (r.status === 404) {
+          link.hidden = true;
+          note.hidden = false;
+        }
+      })
+      .catch(function () { /* 无法确认，保持原样 */ });
+  })();
+</script>
+
+</body>
+</html>
