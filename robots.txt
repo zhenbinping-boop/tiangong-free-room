@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://zhenbinping-boop.github.io/tiangong-free-room/sitemap.xml
